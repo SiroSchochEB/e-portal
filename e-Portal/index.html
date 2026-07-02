@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LoL Rank Dashboard</title>
+
+  <style>
+    :root {
+      --bg: #0b1020;
+      --card: #111827;
+      --card-2: #1f2937;
+      --text: #f9fafb;
+      --muted: #9ca3af;
+      --border: #374151;
+      --accent: #c89b3c;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --master: #a855f7;
+      --diamond: #38bdf8;
+      --emerald: #10b981;
+      --platinum: #60a5fa;
+      --gold: #facc15;
+      --silver: #cbd5e1;
+      --bronze: #b45309;
+      --iron: #6b7280;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, Helvetica, sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(200, 155, 60, 0.16), transparent 35%),
+        radial-gradient(circle at top right, rgba(168, 85, 247, 0.12), transparent 30%),
+        var(--bg);
+      color: var(--text);
+    }
+
+    .page {
+      width: min(1200px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 40px 0;
+    }
+
+    .hero {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 24px;
+      margin-bottom: 28px;
+    }
+
+    .hero h1 {
+      margin: 0;
+      font-size: 36px;
+      letter-spacing: -0.04em;
+    }
+
+    .hero p {
+      margin: 8px 0 0;
+      color: var(--muted);
+    }
+
+    .status {
+      background: rgba(17, 24, 39, 0.85);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 10px 16px;
+      color: var(--muted);
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card,
+    .add-panel,
+    .panel {
+      background: rgba(17, 24, 39, 0.9);
+      border: 1px solid var(--border);
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.25);
+    }
+
+    .stat-card {
+      border-radius: 18px;
+      padding: 18px;
+    }
+
+    .stat-label {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-size: 26px;
+      font-weight: 800;
+    }
+
+    .add-panel {
+      border-radius: 22px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .add-panel h2 {
+      margin: 0 0 16px;
+      font-size: 20px;
+    }
+
+    .add-form {
+      display: grid;
+      grid-template-columns: 1.2fr 0.7fr 1fr 0.8fr auto;
+      gap: 10px;
+    }
+
+    .add-form input,
+    .add-form select,
+    select,
+    button {
+      border: 1px solid var(--border);
+      background: var(--card-2);
+      color: var(--text);
+      border-radius: 12px;
+      padding: 11px 12px;
+      font-size: 14px;
+    }
+
+    .add-form input,
+    .add-form select {
+      width: 100%;
+    }
+
+    button {
+      cursor: pointer;
+      background: linear-gradient(135deg, #c89b3c, #8a6b2a);
+      border: none;
+      font-weight: 700;
+    }
+
+    button:hover {
+      filter: brightness(1.08);
+    }
+
+    .panel {
+      border-radius: 22px;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(31, 41, 55, 0.6);
+    }
+
+    .panel-title {
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 1000px;
+    }
+
+    th {
+      text-align: left;
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(11, 16, 32, 0.8);
+    }
+
+    td {
+      padding: 16px 18px;
+      border-bottom: 1px solid rgba(55, 65, 81, 0.7);
+      vertical-align: middle;
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    .place {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--card-2);
+      font-weight: 800;
+    }
+
+    .place.first {
+      background: linear-gradient(135deg, #facc15, #b45309);
+      color: #111827;
+    }
+
+    .account {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .account strong {
+      font-size: 15px;
+    }
+
+    .account span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .rank-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      font-weight: 800;
+      font-size: 13px;
+      background: var(--card-2);
+      border: 1px solid var(--border);
+    }
+
+    .rank-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--muted);
+    }
+
+    .rank-master .rank-dot { background: var(--master); }
+    .rank-grandmaster .rank-dot { background: #ef4444; }
+    .rank-challenger .rank-dot { background: #67e8f9; }
+    .rank-diamond .rank-dot { background: var(--diamond); }
+    .rank-emerald .rank-dot { background: var(--emerald); }
+    .rank-platinum .rank-dot { background: var(--platinum); }
+    .rank-gold .rank-dot { background: var(--gold); }
+    .rank-silver .rank-dot { background: var(--silver); }
+    .rank-bronze .rank-dot { background: var(--bronze); }
+    .rank-iron .rank-dot { background: var(--iron); }
+
+    .lp {
+      font-weight: 800;
+      color: var(--accent);
+    }
+
+    .wl {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      color: var(--muted);
+    }
+
+    .wins {
+      color: var(--success);
+      font-weight: 700;
+    }
+
+    .losses {
+      color: var(--danger);
+      font-weight: 700;
+    }
+
+    .progress {
+      width: 150px;
+      height: 10px;
+      border-radius: 999px;
+      background: #374151;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #c89b3c, #facc15);
+      border-radius: 999px;
+    }
+
+    .delete-btn {
+      background: rgba(239, 68, 68, 0.15);
+      color: #fecaca;
+      border: 1px solid rgba(239, 68, 68, 0.45);
+    }
+
+    .delete-btn:hover {
+      background: rgba(239, 68, 68, 0.25);
+    }
+
+    .error {
+      margin: 20px;
+      padding: 14px 16px;
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.45);
+      color: #fecaca;
+      border-radius: 14px;
+    }
+
+    .empty {
+      padding: 30px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    @media (max-width: 900px) {
+      .add-form {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (max-width: 800px) {
+      .hero {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .stats {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .panel-header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    }
+
+    @media (max-width: 520px) {
+      .stats,
+      .add-form {
+        grid-template-columns: 1fr;
+      }
+
+      .hero h1 {
+        font-size: 30px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="page">
+    <section class="hero">
+      <div>
+        <h1>LoL Rank Dashboard</h1>
+        <p>Alle Accounts auf einen Blick. Sortiert nach SoloQ- oder Flex-Fortschritt.</p>
+      </div>
+
+      <div class="status" id="status">Lade Accounts...</div>
+    </section>
+
+    <section class="stats">
+      <div class="stat-card">
+        <div class="stat-label">Accounts</div>
+        <div class="stat-value" id="statAccounts">-</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-label">Bester Account</div>
+        <div class="stat-value" id="statBest">-</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-label">Durchschnitt Winrate</div>
+        <div class="stat-value" id="statWinrate">-</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-label">Gesamt Games</div>
+        <div class="stat-value" id="statGames">-</div>
+      </div>
+    </section>
+
+    <section class="add-panel">
+      <h2>Account hinzufügen</h2>
+
+      <form id="addAccountForm" class="add-form">
+        <input id="labelInput" type="text" placeholder="Label, z. B. Main" required />
+
+        <select id="regionInput" required>
+          <option value="euw1">EUW</option>
+          <option value="eun1">EUNE</option>
+          <option value="na1">NA</option>
+          <option value="kr">KR</option>
+          <option value="jp1">JP</option>
+          <option value="tr1">TR</option>
+          <option value="br1">BR</option>
+          <option value="la1">LAN</option>
+          <option value="la2">LAS</option>
+        </select>
+
+        <input id="gameNameInput" type="text" placeholder="Game Name, z. B. hated" required />
+        <input id="tagLineInput" type="text" placeholder="Tagline, z. B. 123" required />
+
+        <button type="submit">Hinzufügen</button>
+      </form>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Account Übersicht</div>
+
+        <div class="controls">
+          <select id="queueSelect">
+            <option value="solo">Solo/Duo</option>
+            <option value="flex">Flex</option>
+          </select>
+
+          <button type="button" onclick="loadAccounts()">Aktualisieren</button>
+        </div>
+      </div>
+
+      <div id="error"></div>
+
+      <div class="table-wrap">
+        <table id="table" style="display:none;">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Account</th>
+              <th>Rank</th>
+              <th>LP</th>
+              <th>Win/Loss</th>
+              <th>Winrate</th>
+              <th>LP-Bar</th>
+              <th>Score</th>
+              <th>Aktion</th>
+            </tr>
+          </thead>
+
+          <tbody id="accounts"></tbody>
+        </table>
+      </div>
+
+      <div class="empty" id="empty" style="display:none;">
+        Keine Accounts gefunden.
+      </div>
+    </section>
+  </main>
+
+  <script>
+    let currentAccounts = [];
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function getWinrate(wins, losses) {
+      const games = wins + losses;
+      if (games === 0) return "-";
+      return ((wins / games) * 100).toFixed(1) + "%";
+    }
+
+    function getRankClass(tier) {
+      return "rank-" + String(tier || "unranked").toLowerCase();
+    }
+
+    function getQueueData(acc, queue) {
+      if (queue === "flex") {
+        return {
+          tier: acc.flexTier,
+          rank: acc.flexRank,
+          lp: acc.flexLp,
+          wins: acc.flexWins,
+          losses: acc.flexLosses,
+          score: acc.flexScore
+        };
+      }
+
+      return {
+        tier: acc.tier,
+        rank: acc.rank,
+        lp: acc.lp,
+        wins: acc.wins,
+        losses: acc.losses,
+        score: acc.score
+      };
+    }
+
+    function renderStats(accounts) {
+      const queue = document.getElementById("queueSelect").value;
+      const totalAccounts = accounts.length;
+      const best = accounts[0];
+
+      let totalWins = 0;
+      let totalLosses = 0;
+
+      for (const acc of accounts) {
+        const q = getQueueData(acc, queue);
+        totalWins += q.wins || 0;
+        totalLosses += q.losses || 0;
+      }
+
+      const totalGames = totalWins + totalLosses;
+      const avgWinrate = totalGames > 0
+        ? ((totalWins / totalGames) * 100).toFixed(1) + "%"
+        : "-";
+
+      document.getElementById("statAccounts").textContent = totalAccounts;
+      document.getElementById("statBest").textContent = best ? best.label : "-";
+      document.getElementById("statWinrate").textContent = avgWinrate;
+      document.getElementById("statGames").textContent = totalGames;
+    }
+
+    function renderTable() {
+      const queue = document.getElementById("queueSelect").value;
+      const table = document.getElementById("table");
+      const empty = document.getElementById("empty");
+      const tbody = document.getElementById("accounts");
+
+      const rows = [...currentAccounts].sort((a, b) => {
+        return getQueueData(b, queue).score - getQueueData(a, queue).score;
+      });
+
+      renderStats(rows);
+
+      if (rows.length === 0) {
+        table.style.display = "none";
+        empty.style.display = "block";
+        return;
+      }
+
+      tbody.innerHTML = rows.map((acc, index) => {
+        const q = getQueueData(acc, queue);
+        const rankText = q.tier === "UNRANKED" ? "UNRANKED" : `${q.tier} ${q.rank}`;
+        const lpPercent = Math.max(0, Math.min(100, q.lp || 0));
+        const placeClass = index === 0 ? "place first" : "place";
+
+        const safeRegion = escapeHtml(acc.region);
+        const safeGameName = escapeHtml(acc.gameName);
+        const safeTagLine = escapeHtml(acc.tagLine);
+
+        return `
+          <tr>
+            <td>
+              <div class="${placeClass}">${index + 1}</div>
+            </td>
+
+            <td>
+              <div class="account">
+                <strong>${escapeHtml(acc.label)}</strong>
+                <span>${escapeHtml(acc.riotId)} · ${safeRegion}</span>
+              </div>
+            </td>
+
+            <td>
+              <span class="rank-badge ${getRankClass(q.tier)}">
+                <span class="rank-dot"></span>
+                ${escapeHtml(rankText)}
+              </span>
+            </td>
+
+            <td class="lp">${q.lp} LP</td>
+
+            <td>
+              <div class="wl">
+                <span class="wins">${q.wins}W</span>
+                <span>/</span>
+                <span class="losses">${q.losses}L</span>
+              </div>
+            </td>
+
+            <td>${getWinrate(q.wins, q.losses)}</td>
+
+            <td>
+              <div class="progress">
+                <div class="progress-bar" style="width:${lpPercent}%"></div>
+              </div>
+            </td>
+
+            <td>${q.score}</td>
+
+            <td>
+              <button
+                type="button"
+                class="delete-btn"
+                onclick="deleteAccount('${safeRegion}', '${safeGameName}', '${safeTagLine}')"
+              >
+                Löschen
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join("");
+
+      table.style.display = "table";
+      empty.style.display = "none";
+    }
+
+    async function loadAccounts() {
+      const status = document.getElementById("status");
+      const errorBox = document.getElementById("error");
+      const table = document.getElementById("table");
+
+      try {
+        errorBox.innerHTML = "";
+        status.textContent = "Lade Accounts...";
+
+        const response = await fetch("/api/accounts");
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Fehler beim Laden der Accounts");
+        }
+
+        currentAccounts = data;
+        renderTable();
+
+        status.textContent = "Letztes Update: " + new Date().toLocaleTimeString();
+      } catch (error) {
+        table.style.display = "none";
+        status.textContent = "Fehler beim Laden";
+        errorBox.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
+      }
+    }
+
+    async function addAccount(event) {
+      event.preventDefault();
+
+      const label = document.getElementById("labelInput").value.trim();
+      const region = document.getElementById("regionInput").value.trim();
+      const gameName = document.getElementById("gameNameInput").value.trim();
+      const tagLine = document.getElementById("tagLineInput").value.trim();
+
+      const response = await fetch("/api/accounts", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          label,
+          region,
+          gameName,
+          tagLine
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(data.error || "Account konnte nicht hinzugefügt werden");
+        return;
+      }
+
+      document.getElementById("addAccountForm").reset();
+
+      await loadAccounts();
+    }
+
+    async function deleteAccount(region, gameName, tagLine) {
+      const confirmed = confirm(`Account ${gameName}#${tagLine} wirklich löschen?`);
+
+      if (!confirmed) {
+        return;
+      }
+
+      const response = await fetch("/api/accounts", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          region,
+          gameName,
+          tagLine
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(data.error || "Account konnte nicht gelöscht werden");
+        return;
+      }
+
+      await loadAccounts();
+    }
+
+    document.getElementById("queueSelect").addEventListener("change", renderTable);
+    document.getElementById("addAccountForm").addEventListener("submit", addAccount);
+
+    loadAccounts();
+    setInterval(loadAccounts, 5 * 60 * 1000);
+  </script>
+</body>
+</html>
