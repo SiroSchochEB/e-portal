@@ -392,13 +392,27 @@ function sendJson(res, statusCode, data) {
 }
 
 async function sendDashboard(res) {
-  const html = await fs.readFile(DASHBOARD_FILE, "utf8");
+  try {
+    const html = await fs.readFile(DASHBOARD_FILE, "utf8");
 
-  res.writeHead(200, {
-    "Content-Type": "text/html; charset=utf-8"
-  });
+    res.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8"
+    });
 
-  res.end(html);
+    res.end(html);
+  } catch (error) {
+    console.error("Dashboard-Datei nicht gefunden:", DASHBOARD_FILE);
+    console.error("cwd:", process.cwd());
+    console.error("__dirname:", __dirname);
+    console.error(error);
+
+    sendJson(res, 500, {
+      error: "Dashboard-Datei nicht gefunden",
+      dashboardFile: DASHBOARD_FILE,
+      cwd: process.cwd(),
+      dirname: __dirname
+    });
+  }
 }
 
 async function sendStaticFile(res, filePath) {
@@ -457,6 +471,19 @@ const server = http.createServer(async (req, res) => {
         });
       }
 
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/health") {
+      sendJson(res, 200, {
+        ok: true,
+        port: PORT,
+        cwd: process.cwd(),
+        dirname: __dirname,
+        dashboardFile: DASHBOARD_FILE,
+        accountsFile: ACCOUNTS_FILE,
+        hasRiotApiKey: Boolean(RIOT_API_KEY)
+      });
       return;
     }
 
