@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LoL Rank Dashboard</title>
+
+  <link rel="stylesheet" href="/dashboard/dashboard.css" />
+</head>
+
+<body>
+  <main class="page">
+    <section class="hero">
+      <div>
+        <h1>LoL Rank Dashboard</h1>
+        <p>Alle Accounts auf einen Blick. Sortiert nach SoloQ- oder Flex-Fortschritt.</p>
+      </div>
+
+      <div class="status" id="status">Lade Accounts...</div>
+    </section>
+
+    <section class="stats">
+      <div class="stat-card">
+        <div class="stat-label">Accounts</div>
+        <div class="stat-value" id="statAccounts">-</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-label">Bester Account</div>
+        <div class="stat-value" id="statBest">-</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-label">Durchschnitt Winrate</div>
+        <div class="stat-value" id="statWinrate">-</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-label">Gesamt Games</div>
+        <div class="stat-value" id="statGames">-</div>
+      </div>
+    </section>
+
+    <section class="add-panel">
+      <h2>Account hinzufügen</h2>
+
+      <form id="addAccountForm" class="add-form">
+        <input id="labelInput" type="text" placeholder="Label, z. B. EdinB9" required />
+
+        <select id="regionInput" required>
+          <option value="euw1">EUW</option>
+          <option value="eun1">EUNE</option>
+          <option value="na1">NA</option>
+          <option value="kr">KR</option>
+          <option value="jp1">JP</option>
+          <option value="tr1">TR</option>
+          <option value="br1">BR</option>
+          <option value="la1">LAN</option>
+          <option value="la2">LAS</option>
+        </select>
+
+        <input id="gameNameInput" type="text" placeholder="Game Name, z. B. Adolf Epstein" required />
+        <input id="tagLineInput" type="text" placeholder="Tagline, z. B. EUW" required />
+
+        <button type="submit">Hinzufügen</button>
+      </form>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Account Übersicht</div>
+
+        <div class="controls">
+          <select id="queueSelect">
+            <option value="solo">Solo/Duo</option>
+            <option value="flex">Flex</option>
+          </select>
+
+          <button type="button" id="refreshButton">Aktualisieren</button>
+        </div>
+      </div>
+
+      <div id="error"></div>
+
+      <div class="table-wrap">
+        <table id="table" style="display: none;">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Account</th>
+              <th>Rank</th>
+              <th>LP</th>
+              <th>Win/Loss</th>
+              <th>Winrate</th>
+              <th>LP-Bar</th>
+              <th>Score</th>
+              <th>Aktion</th>
+            </tr>
+          </thead>
+
+          <tbody id="accounts"></tbody>
+        </table>
+      </div>
+
+      <div class="empty" id="empty" style="display: none;">
+        Keine Accounts gefunden.
+      </div>
+    </section>
+  </main>
+
+  <script src="/dashboard/dashboard.js" defer></script>
+</body>
+</html>

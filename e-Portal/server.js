@@ -5,7 +5,7 @@ const path = require("path");
 const PORT = process.env.PORT || 8080;
 const RIOT_API_KEY = process.env.RIOT_API_KEY;
 const ACCOUNTS_FILE = process.env.ACCOUNTS_FILE || path.join(__dirname, "data", "accounts.json");
-const INDEX_FILE = path.join(__dirname, "index.html");
+const DASHBOARD_FILE = path.join(__dirname, "frontend", "dashboard", "dashboard.html");
 
 const regionalRoute = {
   euw1: "europe",
@@ -103,6 +103,19 @@ async function riotFetch(url) {
 
   if (!response.ok) {
     console.error("Riot API Fehler:", response.status, text);
+
+    if (response.status === 404) {
+      throw new Error("Account wurde bei Riot nicht gefunden");
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("Riot API Key ist ungültig oder abgelaufen");
+    }
+
+    if (response.status === 429) {
+      throw new Error("Riot API Rate Limit erreicht. Bitte später erneut versuchen");
+    }
+
     throw new Error(`Riot API Fehler ${response.status}: ${text}`);
   }
 
@@ -110,7 +123,11 @@ async function riotFetch(url) {
     return null;
   }
 
-  return JSON.parse(text);
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error("Ungültige JSON-Antwort von Riot API");
+  }
 }
 
 async function getAccountRankData(account) {
@@ -134,8 +151,13 @@ async function getAccountRankData(account) {
     `https://${account.region}.api.riotgames.com/lol/league/v4/entries/by-puuid/${riotAccount.puuid}`
   );
 
-  const soloq = leagues.find(x => x.queueType === "RANKED_SOLO_5x5");
-  const flex = leagues.find(x => x.queueType === "RANKED_FLEX_SR");
+  const soloq = Array.isArray(leagues)
+    ? leagues.find(x => x.queueType === "RANKED_SOLO_5x5")
+    : null;
+
+  const flex = Array.isArray(leagues)
+    ? leagues.find(x => x.queueType === "RANKED_FLEX_SR")
+    : null;
 
   return {
     label: account.label,
@@ -187,29 +209,62 @@ async function getAccountsWithRank() {
   const result = [];
 
   for (const account of accounts) {
-    const data = await getAccountRankData(account);
+    try {
+      const data = await getAccountRankData(account);
 
-    result.push({
-      label: data.label,
-      riotId: data.riotId,
-      region: data.region,
-      gameName: data.gameName,
-      tagLine: data.tagLine,
+      result.push({
+        label: data.label,
+        riotId: data.riotId,
+        region: data.region,
+        gameName: data.gameName,
+        tagLine: data.tagLine,
 
-      tier: data.soloq.tier,
-      rank: data.soloq.rank,
-      lp: data.soloq.lp,
-      wins: data.soloq.wins,
-      losses: data.soloq.losses,
-      score: data.soloq.score,
+        tier: data.soloq.tier,
+        rank: data.soloq.rank,
+        lp: data.soloq.lp,
+        wins: data.soloq.wins,
+        losses: data.soloq.losses,
+        score: data.soloq.score,
 
-      flexTier: data.flex.tier,
-      flexRank: data.flex.rank,
-      flexLp: data.flex.lp,
-      flexWins: data.flex.wins,
-      flexLosses: data.flex.losses,
-      flexScore: data.flex.score
-    });
+        flexTier: data.flex.tier,
+        flexRank: data.flex.rank,
+        flexLp: data.flex.lp,
+        flexWins: data.flex.wins,
+        flexLosses: data.flex.losses,
+        flexScore: data.flex.score,
+
+        error: null
+      });
+    } catch (error) {
+      console.error(
+        `Fehler bei Account ${account.gameName}#${account.tagLine}:`,
+        error.message
+      );
+
+      result.push({
+        label: account.label,
+        riotId: `${account.gameName}#${account.tagLine}`,
+        region: account.region,
+        gameName: account.gameName,
+        tagLine: account.tagLine,
+
+        tier: "ERROR",
+        rank: "",
+        lp: 0,
+        wins: 0,
+        losses: 0,
+        score: -1,
+
+        flexTier: "ERROR",
+        flexRank: "",
+        flexLp: 0,
+        flexWins: 0,
+        flexLosses: 0,
+        flexScore: -1,
+
+        error: error.message
+      });
+    }
   }
 
   result.sort((a, b) => b.score - a.score);
@@ -290,6 +345,12 @@ async function addAccount(input) {
     throw new Error("Dieser Account ist bereits vorhanden");
   }
 
+  try {
+    await getAccountRankData(newAccount);
+  } catch (error) {
+    throw new Error(`Account konnte nicht hinzugefügt werden: ${error.message}`);
+  }
+
   accounts.push(newAccount);
   await writeAccounts(accounts);
 
@@ -330,12 +391,39 @@ function sendJson(res, statusCode, data) {
   res.end(JSON.stringify(data, null, 2));
 }
 
-async function sendIndex(res) {
-  const html = await fs.readFile(INDEX_FILE, "utf8");
+async function sendDashboard(res) {
+  const html = await fs.readFile(DASHBOARD_FILE, "utf8");
+
   res.writeHead(200, {
     "Content-Type": "text/html; charset=utf-8"
   });
+
   res.end(html);
+}
+
+async function sendStaticFile(res, filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+
+  const contentTypes = {
+    ".css": "text/css; charset=utf-8",
+    ".js": "application/javascript; charset=utf-8",
+    ".html": "text/html; charset=utf-8",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".svg": "image/svg+xml",
+    ".ico": "image/x-icon",
+    ".json": "application/json; charset=utf-8"
+  };
+
+  const contentType = contentTypes[ext] || "application/octet-stream";
+  const content = await fs.readFile(filePath);
+
+  res.writeHead(200, {
+    "Content-Type": contentType
+  });
+
+  res.end(content);
 }
 
 const server = http.createServer(async (req, res) => {
@@ -343,7 +431,32 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
 
     if (req.method === "GET" && url.pathname === "/") {
-      await sendIndex(res);
+      await sendDashboard(res);
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname.startsWith("/dashboard/")) {
+      const requestedPath = path.normalize(
+        path.join(__dirname, "frontend", url.pathname)
+      );
+
+      const frontendRoot = path.normalize(path.join(__dirname, "frontend"));
+
+      if (!requestedPath.startsWith(frontendRoot)) {
+        sendJson(res, 403, {
+          error: "Forbidden"
+        });
+        return;
+      }
+
+      try {
+        await sendStaticFile(res, requestedPath);
+      } catch {
+        sendJson(res, 404, {
+          error: "Static file not found"
+        });
+      }
+
       return;
     }
 
@@ -401,6 +514,7 @@ const server = http.createServer(async (req, res) => {
     });
   } catch (error) {
     console.error("Server Fehler:", error);
+
     sendJson(res, 500, {
       error: "Interner Serverfehler"
     });
