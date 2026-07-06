@@ -247,6 +247,24 @@ function renderState(state, options = {}) {
   setStatus(`Patch ${state.version || "unbekannt"} · Runde läuft`);
 }
 
+async function loadState() {
+  try {
+    clearError();
+
+    const response = await fetch("/api/bravery/state");
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Status konnte nicht geladen werden");
+    }
+
+    renderState(data);
+  } catch (error) {
+    showError(error.message);
+    setStatus("Fehler");
+  }
+}
+
 async function rollChampions() {
   const container = document.getElementById("champions");
   const rollButton = document.getElementById("rollButton");
@@ -325,7 +343,9 @@ async function selectChampion(championId) {
       throw new Error(data.error || "Champion konnte nicht gewählt werden");
     }
 
-    renderState(data);
+    renderState(data, {
+      force: true
+    });
   } catch (error) {
     showError(error.message);
   }
