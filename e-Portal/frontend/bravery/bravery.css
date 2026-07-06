@@ -508,3 +508,46 @@ button:disabled {
     width: 100%;
   }
 }
+
+.starter-rune-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.starter-rune-row .starter-item {
+  margin: 0;
+}
+
+.rune-build.compact-runes {
+  width: auto;
+  flex: 1;
+  min-width: 260px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.rune-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: transparent;
+  border: 0;
+}
+
+.rune-icon img {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+  display: block;
+}

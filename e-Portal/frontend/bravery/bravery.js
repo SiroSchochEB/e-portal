@@ -120,8 +120,35 @@ function renderItemBuild(selection, options = {}) {
 
   return `
     <div class="item-build ${locked ? "item-build-locked" : ""}">
-      ${renderStarterItem(selection.starterItem, locked ? "locked-starter" : "", showNames)}
+      <div class="starter-rune-row">
+        ${renderStarterItem(selection.starterItem, locked ? "locked-starter" : "", showNames)}
+        ${renderRunes(selection.runes)}
+      </div>
+
       ${renderItemList(selection.items || [], locked ? "locked-items" : "", showNames)}
+    </div>
+  `;
+}
+
+function renderRunes(runes) {
+  if (!runes) {
+    return "";
+  }
+
+  const allRunes = [
+    runes.keystone,
+    ...(runes.primaryRunes || []),
+    ...(runes.secondaryRunes || []),
+    ...(runes.statShards || [])
+  ].filter(Boolean);
+
+  return `
+    <div class="rune-build compact-runes">
+      ${allRunes.map(rune => `
+        <div class="rune-icon" title="${escapeHtml(rune.name)}">
+          <img src="${escapeHtml(rune.iconUrl)}" alt="${escapeHtml(rune.name)}" />
+        </div>
+      `).join("")}
     </div>
   `;
 }
@@ -229,6 +256,8 @@ function renderState(state, options = {}) {
           showNames: false,
           locked: true
         })}
+
+        ${renderRunes(currentPlayerSelection.runes)}
 
         <p>Du kannst deine Auswahl in dieser Runde nicht mehr ändern.</p>
       </div>
@@ -379,6 +408,14 @@ async function selectChampion(championId) {
 }
 
 async function resetGame() {
+  const confirmed = confirm(
+    "Möchtest du wirklich ein neues Spiel starten?\n\nAlle gewürfelten Champions, Items und Runen werden gelöscht."
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
   try {
     clearError();
 

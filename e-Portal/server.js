@@ -98,6 +98,8 @@ const BLOCKED_SPECIAL_ITEM_NAMES = new Set([
   "Turbo Chemtank",
   "Twilight's Edge",
   "Wordless Promise",
+  "Veigar's Talisman of Ascension",
+  "Cloak of Starry Night",
 
   // ARAM Guardian Items
   "Guardian's Blade",
@@ -604,6 +606,19 @@ function isBlockedBuildItem(item) {
   );
 }
 
+function isBootItem(item) {
+  const tags = item.tags || [];
+  const name = item.name || "";
+
+  return (
+    tags.includes("Boots") ||
+    name.includes("Boots") ||
+    name.includes("Greaves") ||
+    name.includes("Treads") ||
+    name.includes("Shoes")
+  );
+}
+
 function isAllowedFinalBuildItem(item) {
   const tags = item.tags || [];
 
@@ -702,11 +717,11 @@ async function getRandomItems(version, role, count = 6) {
   }
 
   const boots = shuffleArray(
-    validFinalItems.filter(item => item.tags.includes("Boots"))
+    validFinalItems.filter(isBootItem)
   );
 
   const nonBoots = shuffleArray(
-    validFinalItems.filter(item => !item.tags.includes("Boots"))
+    validFinalItems.filter(item => !isBootItem(item))
   );
 
   const finalItems = [];
@@ -732,6 +747,150 @@ async function getRandomItems(version, role, count = 6) {
   return {
     starterItem,
     finalItems
+  };
+}
+
+function toPublicRune(rune) {
+  return {
+    id: rune.id,
+    key: rune.key,
+    name: rune.name,
+    shortDesc: rune.shortDesc || "",
+    longDesc: rune.longDesc || "",
+    iconUrl: `https://ddragon.leagueoflegends.com/cdn/img/${rune.icon}`
+  };
+}
+
+async function getRandomRunes(version) {
+  const runeData = await fetchDataDragonJson(
+    `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/runesReforged.json`
+  );
+
+  if (!Array.isArray(runeData) || runeData.length < 2) {
+    throw new Error("Keine gültigen Runen-Daten gefunden");
+  }
+
+  const styles = runeData
+    .filter(style => Array.isArray(style.slots) && style.slots.length >= 4)
+    .map(style => ({
+      id: style.id,
+      key: style.key,
+      name: style.name,
+      iconUrl: `https://ddragon.leagueoflegends.com/cdn/img/${style.icon}`,
+      slots: style.slots
+    }));
+
+  if (styles.length < 2) {
+    throw new Error("Zu wenige gültige Runenbäume gefunden");
+  }
+
+  const primaryStyle = shuffleArray(styles)[0];
+  const secondaryStyle = shuffleArray(
+    styles.filter(style => style.id !== primaryStyle.id)
+  )[0];
+
+  const primarySlots = primaryStyle.slots;
+
+  const keystone = shuffleArray(primarySlots[0].runes || [])[0];
+  const primaryRune1 = shuffleArray(primarySlots[1].runes || [])[0];
+  const primaryRune2 = shuffleArray(primarySlots[2].runes || [])[0];
+  const primaryRune3 = shuffleArray(primarySlots[3].runes || [])[0];
+
+  if (!keystone || !primaryRune1 || !primaryRune2 || !primaryRune3) {
+    throw new Error(`Ungültiger primärer Runenbaum: ${primaryStyle.name}`);
+  }
+
+  const secondarySlots = shuffleArray(
+    secondaryStyle.slots
+      .slice(1)
+      .filter(slot => Array.isArray(slot.runes) && slot.runes.length > 0)
+  ).slice(0, 2);
+
+  if (secondarySlots.length < 2) {
+    throw new Error(`Ungültiger sekundärer Runenbaum: ${secondaryStyle.name}`);
+  }
+
+  const secondaryRunes = secondarySlots.map(slot => shuffleArray(slot.runes)[0]);
+
+  const offenseShards = [
+    {
+      id: "shard-offense-adaptive",
+      name: "Adaptive Force",
+      iconUrl: "https://ddragon.leagueoflegends.com/cdn/img/perk-images/StatMods/StatModsAdaptiveForceIcon.png"
+    },
+    {
+      id: "shard-offense-attack-speed",
+      name: "Attack Speed",
+      iconUrl: "https://ddragon.leagueoflegends.com/cdn/img/perk-images/StatMods/StatModsAttackSpeedIcon.png"
+    },
+    {
+      id: "shard-offense-ability-haste",
+      name: "Ability Haste",
+      iconUrl: "https://ddragon.leagueoflegends.com/cdn/img/perk-images/StatMods/StatModsCDRScalingIcon.png"
+    }
+  ];
+
+  const flexShards = [
+    {
+      id: "shard-flex-adaptive",
+      name: "Adaptive Force",
+      iconUrl: "https://ddragon.leagueoflegends.com/cdn/img/perk-images/StatMods/StatModsAdaptiveForceIcon.png"
+    },
+    {
+      id: "shard-flex-move-speed",
+      name: "Move Speed",
+      iconUrl: "https://ddragon.leagueoflegends.com/cdn/img/perk-images/StatMods/StatModsMovementSpeedIcon.png"
+    },
+    {
+      id: "shard-flex-health-scaling",
+      name: "Scaling Health",
+      iconUrl: "https://ddragon.leagueoflegends.com/cdn/img/perk-images/StatMods/StatModsHealthScalingIcon.png"
+    }
+  ];
+
+  const defenseShards = [
+    {
+      id: "shard-defense-health",
+      name: "Health",
+      iconUrl: "https://ddragon.leagueoflegends.com/cdn/img/perk-images/StatMods/StatModsHealthPlusIcon.png"
+    },
+    {
+      id: "shard-defense-tenacity",
+      name: "Tenacity and Slow Resist",
+      iconUrl: "https://ddragon.leagueoflegends.com/cdn/img/perk-images/StatMods/StatModsTenacityIcon.png"
+    },
+    {
+      id: "shard-defense-health-scaling",
+      name: "Scaling Health",
+      iconUrl: "https://ddragon.leagueoflegends.com/cdn/img/perk-images/StatMods/StatModsHealthScalingIcon.png"
+    }
+  ];
+
+  return {
+    primaryStyle: {
+      id: primaryStyle.id,
+      key: primaryStyle.key,
+      name: primaryStyle.name,
+      iconUrl: primaryStyle.iconUrl
+    },
+    secondaryStyle: {
+      id: secondaryStyle.id,
+      key: secondaryStyle.key,
+      name: secondaryStyle.name,
+      iconUrl: secondaryStyle.iconUrl
+    },
+    keystone: toPublicRune(keystone),
+    primaryRunes: [
+      toPublicRune(primaryRune1),
+      toPublicRune(primaryRune2),
+      toPublicRune(primaryRune3)
+    ],
+    secondaryRunes: secondaryRunes.map(toPublicRune),
+    statShards: [
+      shuffleArray(offenseShards)[0],
+      shuffleArray(flexShards)[0],
+      shuffleArray(defenseShards)[0]
+    ]
   };
 }
 
@@ -967,6 +1126,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       const itemBuild = await getRandomItems(state.version, role, 6);
+      const runeBuild = await getRandomRunes(state.version);
 
       if (!itemBuild.starterItem) {
         throw new Error(`Kein Starter Item für Rolle ${role} generiert`);
@@ -986,6 +1146,7 @@ const server = http.createServer(async (req, res) => {
         champion,
         starterItem: itemBuild.starterItem,
         items: itemBuild.finalItems,
+        runes: runeBuild,
         selectedAt: new Date().toISOString()
       });
 
