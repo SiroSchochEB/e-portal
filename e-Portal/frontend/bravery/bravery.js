@@ -189,12 +189,7 @@ function renderState(state, options = {}) {
   rollButton.disabled = Boolean(currentPlayerSelection) || champions.length > 0;
 
   if (champions.length === 0) {
-    container.innerHTML = `
-      <div class="locked-choice">
-        <h3>Noch nicht gewürfelt</h3>
-        <p>Klicke auf „Würfle“, um deine 3 Champions für diese Runde zu erhalten.</p>
-      </div>
-    `;
+    container.innerHTML = "";
 
     roleSelect.style.display = "none";
     renderPlayers(selections);

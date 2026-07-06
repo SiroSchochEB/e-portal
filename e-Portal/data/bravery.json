@@ -1,8 +1,122 @@
 {
-  "version": null,
+  "version": "16.13.1",
   "champions": [],
   "rolls": {},
-  "selections": [],
-  "createdAt": null,
-  "updatedAt": null
+  "selections": [
+    {
+      "playerName": "sada",
+      "role": "support",
+      "champion": {
+        "id": "Kassadin",
+        "key": "38",
+        "name": "Kassadin",
+        "title": "der Leerengänger",
+        "imageUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/champion/Kassadin.png",
+        "splashUrl": "https://ddragon.leagueoflegends.com/cdn/img/champion/splash/Kassadin_0.jpg"
+      },
+      "starterItem": {
+        "id": "3876",
+        "name": "Solstice Sleigh",
+        "description": "",
+        "imageUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/item/3876.png",
+        "gold": 400,
+        "tags": [
+          "Health",
+          "HealthRegen",
+          "ManaRegen",
+          "Vision",
+          "GoldPer",
+          "Lane"
+        ],
+        "itemType": "support-final"
+      },
+      "items": [
+        {
+          "id": "3171",
+          "name": "Crimson Lucidity",
+          "description": "",
+          "imageUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/item/3171.png",
+          "gold": 900,
+          "tags": [
+            "CooldownReduction",
+            "Boots"
+          ],
+          "itemType": "boots"
+        },
+        {
+          "id": "3139",
+          "name": "Mercurial Scimitar",
+          "description": "Activate to remove all crowd control debuffs and grant massive Move Speed",
+          "imageUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/item/3139.png",
+          "gold": 3200,
+          "tags": [
+            "SpellBlock",
+            "Damage",
+            "LifeSteal",
+            "Active",
+            "NonbootsMovement",
+            "Tenacity"
+          ],
+          "itemType": "final"
+        },
+        {
+          "id": "3302",
+          "name": "Terminus",
+          "description": "Kill minions periodically to heal and grant gold to a nearby ally",
+          "imageUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/item/3302.png",
+          "gold": 3000,
+          "tags": [
+            "Damage",
+            "AttackSpeed",
+            "OnHit",
+            "MagicPenetration",
+            "ArmorPenetration"
+          ],
+          "itemType": "final"
+        },
+        {
+          "id": "2503",
+          "name": "Blackfire Torch",
+          "description": "",
+          "imageUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/item/2503.png",
+          "gold": 2800,
+          "tags": [
+            "SpellDamage",
+            "Mana",
+            "CooldownReduction",
+            "AbilityHaste"
+          ],
+          "itemType": "final"
+        },
+        {
+          "id": "3031",
+          "name": "Infinity Edge",
+          "description": "Massively enhances critical strikes",
+          "imageUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/item/3031.png",
+          "gold": 3500,
+          "tags": [
+            "CriticalStrike",
+            "Damage"
+          ],
+          "itemType": "final"
+        },
+        {
+          "id": "667666",
+          "name": "The Collector",
+          "description": "",
+          "imageUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/item/667666.png",
+          "gold": 3000,
+          "tags": [
+            "Damage",
+            "CriticalStrike",
+            "ArmorPenetration"
+          ],
+          "itemType": "final"
+        }
+      ],
+      "selectedAt": "2026-07-06T17:54:22.306Z"
+    }
+  ],
+  "createdAt": "2026-07-06T17:54:20.142Z",
+  "updatedAt": "2026-07-06T17:54:22.306Z"
 }

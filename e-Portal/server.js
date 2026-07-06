@@ -30,6 +30,107 @@ const regionalRoute = {
   jp1: "asia"
 };
 
+const LANE_STARTER_ITEM_NAMES = new Set([
+  "Cull",
+  "Dark Seal",
+  "Doran's Blade",
+  "Doran's Bow",
+  "Doran's Helm",
+  "Doran's Ring",
+  "Tear of the Goddess"
+]);
+
+const LANE_STARTER_ITEM_IDS = new Set([
+  "1083", // Cull
+  "1082", // Dark Seal
+  "1055", // Doran's Blade
+  "1056", // Doran's Ring
+  "3070"  // Tear of the Goddess
+]);
+
+const JUNGLE_STARTER_ITEM_NAMES = new Set([
+  "Gustwalker Hatchling",
+  "Mosstomper Seedling",
+  "Scorchclaw Pup"
+]);
+
+const JUNGLE_STARTER_ITEM_IDS = new Set([
+  "1101",
+  "1102",
+  "1103"
+]);
+
+const SUPPORT_FINAL_ITEM_NAMES = new Set([
+  "Bloodsong",
+  "Celestial Opposition",
+  "Dream Maker",
+  "Solstice Sleigh",
+  "Zaz'Zak's Realmspike",
+  "Zaz'Zak's Realm Spike"
+]);
+
+const SUPPORT_STARTER_AND_COMPONENT_NAMES = new Set([
+  "World Atlas",
+  "Runic Compass",
+  "Bounty of Worlds"
+]);
+
+const BLOCKED_LEGACY_OR_EXTRA_STARTER_NAMES = new Set([
+  "Doran's Shield"
+]);
+
+const BLOCKED_SPECIAL_ITEM_NAMES = new Set([
+  // Arena / Sondermodus
+  "Atma's Reckoning",
+  "Cruelty",
+  "Flesheater",
+  "Shield of Molten Stone",
+  "Sword of Blossoming Dawn",
+  "Demon King's Crown",
+  "Force of Entropy",
+  "Gambler's Blade",
+  "Hemomancer's Helm",
+  "Lightning Braid",
+  "Moonflair Spellblade",
+  "Puppeteer",
+  "Reaper's Toll",
+  "Runecarver",
+  "Turbo Chemtank",
+  "Twilight's Edge",
+  "Wordless Promise",
+
+  // ARAM Guardian Items
+  "Guardian's Blade",
+  "Guardian's Hammer",
+  "Guardian's Horn",
+  "Guardian's Orb",
+
+  // Weitere ARAM-/Mode-Items
+  "Poro-Snax",
+  "The Golden Spatula"
+]);
+
+const BLOCKED_BUILD_ITEM_NAMES = new Set([
+  ...LANE_STARTER_ITEM_NAMES,
+  ...JUNGLE_STARTER_ITEM_NAMES,
+  ...SUPPORT_FINAL_ITEM_NAMES,
+  ...SUPPORT_STARTER_AND_COMPONENT_NAMES,
+  ...BLOCKED_LEGACY_OR_EXTRA_STARTER_NAMES,
+  ...BLOCKED_SPECIAL_ITEM_NAMES
+]);
+
+const BLOCKED_BUILD_ITEM_IDS = new Set([
+  ...LANE_STARTER_ITEM_IDS,
+  ...JUNGLE_STARTER_ITEM_IDS,
+  "1054", // Doran's Shield, falls im Patch vorhanden
+  "3865",
+  "3866",
+  "3867",
+  "3869",
+  "3870",
+  "3871"
+]);
+
 async function ensureAccountsFile() {
   await fs.mkdir(path.dirname(ACCOUNTS_FILE), { recursive: true });
 
@@ -453,15 +554,107 @@ async function getRandomChampions(count = 3) {
   };
 }
 
-async function getRandomItems(version, role, count = 6) {
-  const starterItemIdsByRole = {
-    top: ["1054", "1055", "1083", "1056"],
-    mid: ["1056", "1054", "1055"],
-    adc: ["1055", "1083"],
-    jungle: ["1101", "1102", "1103"],
-    support: ["3865", "3866", "3867"]
+function toPublicItem(item, itemType) {
+  return {
+    id: item.id,
+    name: item.name,
+    description: item.description,
+    imageUrl: item.imageUrl,
+    gold: item.gold,
+    tags: item.tags,
+    itemType
   };
+}
 
+function isSummonersRiftItem(item) {
+  return item.maps?.["11"] === true;
+}
+
+function isLaneStarterItem(item) {
+  return (
+    LANE_STARTER_ITEM_NAMES.has(item.name) ||
+    LANE_STARTER_ITEM_IDS.has(item.id)
+  );
+}
+
+function isJungleStarterItem(item) {
+  return (
+    JUNGLE_STARTER_ITEM_NAMES.has(item.name) ||
+    JUNGLE_STARTER_ITEM_IDS.has(item.id)
+  );
+}
+
+function isSupportFinalItem(item) {
+  return SUPPORT_FINAL_ITEM_NAMES.has(item.name);
+}
+
+function isModeSpecificItem(item) {
+  const name = item.name || "";
+
+  return (
+    name.startsWith("Guardian's ") ||
+    BLOCKED_SPECIAL_ITEM_NAMES.has(name)
+  );
+}
+
+function isBlockedBuildItem(item) {
+  return (
+    BLOCKED_BUILD_ITEM_NAMES.has(item.name) ||
+    BLOCKED_BUILD_ITEM_IDS.has(item.id)
+  );
+}
+
+function isAllowedFinalBuildItem(item) {
+  const tags = item.tags || [];
+
+  if (!isSummonersRiftItem(item)) return false;
+
+  if (item.gold <= 0) return false;
+  if (item.purchasable !== true) return false;
+  if (item.inStore === false) return false;
+
+  if (item.consumed === true) return false;
+  if (item.consumeOnFull === true) return false;
+
+  if (item.requiredChampion) return false;
+  if (item.requiredAlly) return false;
+  if (item.specialRecipe) return false;
+
+  if (tags.includes("Consumable")) return false;
+  if (tags.includes("Trinket")) return false;
+  if (tags.includes("Jungle")) return false;
+
+if (isBlockedBuildItem(item)) return false;
+if (isModeSpecificItem(item)) return false;
+
+  // Nur fertige Items, keine Komponenten.
+  if (Array.isArray(item.into) && item.into.length > 0) return false;
+
+  return true;
+}
+
+function getStarterItemsForRole(allItems, role) {
+  if (role === "jungle") {
+    return allItems.filter(item =>
+      isSummonersRiftItem(item) &&
+      isJungleStarterItem(item)
+    );
+  }
+
+  if (role === "support") {
+    return allItems.filter(item =>
+      isSummonersRiftItem(item) &&
+      isSupportFinalItem(item)
+    );
+  }
+
+  return allItems.filter(item =>
+    isSummonersRiftItem(item) &&
+    isLaneStarterItem(item)
+  );
+}
+
+async function getRandomItems(version, role, count = 6) {
   const itemData = await fetchDataDragonJson(
     `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/item.json`
   );
@@ -472,49 +665,36 @@ async function getRandomItems(version, role, count = 6) {
     description: item.plaintext || "",
     imageUrl: `https://ddragon.leagueoflegends.com/cdn/${version}/img/item/${item.image?.full || `${id}.png`}`,
     gold: item.gold?.total || 0,
-    purchasable: item.gold?.purchasable !== false,
+    purchasable: item.gold?.purchasable === true,
     tags: item.tags || [],
     maps: item.maps || {},
     into: item.into || [],
     from: item.from || [],
+    inStore: item.inStore,
+    consumed: item.consumed,
+    consumeOnFull: item.consumeOnFull,
     requiredChampion: item.requiredChampion || null,
-    requiredAlly: item.requiredAlly || null
+    requiredAlly: item.requiredAlly || null,
+    specialRecipe: item.specialRecipe || null
   }));
 
-  const starterIds = starterItemIdsByRole[role] || starterItemIdsByRole.top;
-  const allStarterIds = Object.values(starterItemIdsByRole).flat();
-
-  const starterItems = allItems.filter(item => starterIds.includes(item.id));
+  const starterItems = getStarterItemsForRole(allItems, role);
 
   if (starterItems.length === 0) {
     throw new Error(`Kein Starter Item für Rolle ${role} gefunden`);
   }
 
-  const starterItem = {
-    ...shuffleArray(starterItems)[0],
-    itemType: "starter"
-  };
+  const starterItem = toPublicItem(
+    shuffleArray(starterItems)[0],
+    role === "support" ? "support-final" : "starter"
+  );
 
-  const validFinalItems = allItems.filter(item => {
-    const isSummonersRift = item.maps?.["11"] === true;
-    const isPurchasable = item.purchasable && item.gold > 0;
-    const isFinalItem = item.into.length === 0;
-    const isNotConsumable = !item.tags.includes("Consumable");
-    const isNotTrinket = !item.tags.includes("Trinket");
-    const isNotJungle = !item.tags.includes("Jungle");
-    const isNotChampionSpecific = !item.requiredChampion && !item.requiredAlly;
-    const isNotAnyStarter = !allStarterIds.includes(item.id);
+  const validFinalItems = allItems.filter(isAllowedFinalBuildItem);
 
-    return (
-      isSummonersRift &&
-      isPurchasable &&
-      isFinalItem &&
-      isNotConsumable &&
-      isNotTrinket &&
-      isNotJungle &&
-      isNotChampionSpecific &&
-      isNotAnyStarter
-    );
+  console.log("Bravery Item Pools:", {
+    role,
+    starterItems: starterItems.length,
+    validFinalItems: validFinalItems.length
   });
 
   if (validFinalItems.length < count) {
@@ -532,10 +712,7 @@ async function getRandomItems(version, role, count = 6) {
   const finalItems = [];
 
   if (boots.length > 0) {
-    finalItems.push({
-      ...boots[0],
-      itemType: "boots"
-    });
+    finalItems.push(toPublicItem(boots[0], "boots"));
   }
 
   for (const item of nonBoots) {
@@ -544,10 +721,7 @@ async function getRandomItems(version, role, count = 6) {
     const alreadyUsed = finalItems.some(selectedItem => selectedItem.id === item.id);
 
     if (!alreadyUsed) {
-      finalItems.push({
-        ...item,
-        itemType: "final"
-      });
+      finalItems.push(toPublicItem(item, "final"));
     }
   }
 

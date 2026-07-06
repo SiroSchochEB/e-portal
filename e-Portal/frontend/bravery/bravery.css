@@ -131,18 +131,6 @@ button:disabled {
   font-weight: 700;
 }
 
-.role-select select {
-  width: 240px;
-  max-width: 100%;
-  padding: 11px 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: #111728;
-  color: #f5f7fb;
-  font-weight: 700;
-}
-
-/* Rollen als Buttons */
 .role-button-row {
   display: flex;
   flex-wrap: wrap;
@@ -179,6 +167,10 @@ button:disabled {
   grid-template-columns: repeat(3, 1fr);
   gap: 18px;
   margin-top: 20px;
+}
+
+.champion-grid:empty {
+  display: none;
 }
 
 .champion-card {
@@ -235,7 +227,6 @@ button:disabled {
   animation-delay: 320ms;
 }
 
-/* Verhindert erneute Animation beim automatischen State-Reload */
 .champion-card.no-reveal {
   opacity: 1;
   transform: none;
@@ -262,7 +253,6 @@ button:disabled {
   color: #b8c0d8;
 }
 
-/* Deine Wahl auf ganzer Breite */
 .locked-choice {
   width: 100%;
   max-width: none;
@@ -310,10 +300,13 @@ button:disabled {
 
 .selection {
   margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .selection h3 {
   margin: 0 0 14px;
+  font-size: 20px;
 }
 
 .player-selection-list {
@@ -437,8 +430,8 @@ button:disabled {
   margin-top: 14px;
 }
 
-/* Lade-Effekt beim Würfeln */
 .champion-grid.rolling {
+  display: grid;
   min-height: 260px;
   position: relative;
 }
