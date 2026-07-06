@@ -1,5 +1,6 @@
 let currentState = {
   champions: [],
+  rolls: {},
   selections: []
 };
 
@@ -61,9 +62,14 @@ function clearError() {
 }
 
 function getStateSignature(state) {
+  const playerName = localStorage.getItem("braveryPlayerName") || "";
+  const playerKey = playerName.toLowerCase();
+  const playerRoll = state.rolls?.[playerKey] || [];
+
   return JSON.stringify({
     version: state.version || "",
-    champions: (state.champions || []).map(champion => champion.id),
+    playerName,
+    playerRoll: playerRoll.map(champion => champion.id),
     selections: (state.selections || []).map(selection => ({
       playerName: selection.playerName,
       championId: selection.champion?.id,
@@ -174,17 +180,31 @@ function renderState(state, options = {}) {
   const rollButton = document.getElementById("rollButton");
   const roleSelect = document.getElementById("roleSelect");
 
-  const champions = state.champions || [];
+  const playerName = localStorage.getItem("braveryPlayerName") || "";
+  const playerKey = playerName.toLowerCase();
+  const champions = state.rolls?.[playerKey] || [];
   const selections = state.selections || [];
   const currentPlayerSelection = getCurrentPlayerSelection(selections);
 
-  rollButton.disabled = champions.length > 0;
+  rollButton.disabled = Boolean(currentPlayerSelection) || champions.length > 0;
 
   if (champions.length === 0) {
-    container.innerHTML = "";
+    container.innerHTML = `
+      <div class="locked-choice">
+        <h3>Noch nicht gewürfelt</h3>
+        <p>Klicke auf „Würfle“, um deine 3 Champions für diese Runde zu erhalten.</p>
+      </div>
+    `;
+
     roleSelect.style.display = "none";
-    renderPlayers([]);
-    setStatus("Bereit");
+    renderPlayers(selections);
+
+    if (selections.length > 0) {
+      setStatus(`Patch ${state.version || "unbekannt"} · Runde läuft`);
+    } else {
+      setStatus("Bereit");
+    }
+
     return;
   }
 
@@ -278,8 +298,20 @@ async function rollChampions() {
     container.classList.add("rolling");
     container.innerHTML = "";
 
+    const playerName = getPlayerName();
+
+    if (!playerName) {
+      throw new Error("Bitte gib einen Spielernamen ein.");
+    }
+
     const response = await fetch("/api/bravery/roll", {
-      method: "POST"
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        playerName
+      })
     });
 
     const data = await response.json();

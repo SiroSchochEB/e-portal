@@ -66,6 +66,7 @@ async function ensureBraveryStateFile() {
     await writeBraveryState({
       version: null,
       champions: [],
+      rolls: {},
       selections: [],
       createdAt: null,
       updatedAt: null
@@ -83,6 +84,7 @@ async function readBraveryState() {
     return {
       version: null,
       champions: [],
+      rolls: {},
       selections: [],
       createdAt: null,
       updatedAt: null
@@ -690,22 +692,43 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "POST" && url.pathname === "/api/bravery/roll") {
+      const body = await readRequestBody(req);
+      const playerName = String(body.playerName || "").trim();
+
+      if (!playerName) {
+        sendJson(res, 400, {
+          error: "Spielername fehlt"
+        });
+        return;
+      }
+
       const state = await readBraveryState();
 
-      if (state.champions && state.champions.length > 0) {
+      const alreadySelected = (state.selections || []).some(
+        selection => selection.playerName.toLowerCase() === playerName.toLowerCase()
+      );
+
+      if (alreadySelected) {
         sendJson(res, 400, {
-          error: "Es läuft bereits eine Runde. Starte zuerst ein neues Spiel."
+          error: "Du hast bereits einen Champion gewählt."
         });
         return;
       }
 
       const data = await getRandomChampions(3);
 
+      const playerKey = playerName.toLowerCase();
+
       const newState = {
-        version: data.version,
-        champions: data.champions,
-        selections: [],
-        createdAt: new Date().toISOString(),
+        ...state,
+        version: state.version || data.version,
+        champions: [],
+        rolls: {
+          ...(state.rolls || {}),
+          [playerKey]: data.champions
+        },
+        selections: state.selections || [],
+        createdAt: state.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
 
@@ -739,9 +762,12 @@ const server = http.createServer(async (req, res) => {
 
       const state = await readBraveryState();
 
-      if (!state.champions || state.champions.length === 0) {
+      const playerKey = playerName.toLowerCase();
+      const playerRoll = (state.rolls || {})[playerKey] || [];
+
+      if (playerRoll.length === 0) {
         sendJson(res, 400, {
-          error: "Es läuft aktuell keine Runde."
+          error: "Bitte würfle zuerst deine Champions."
         });
         return;
       }
@@ -757,7 +783,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const champion = (state.champions || []).find(championItem => championItem.id === championId);
+      const champion = playerRoll.find(championItem => championItem.id === championId);
 
       if (!champion) {
         sendJson(res, 400, {
@@ -789,8 +815,16 @@ const server = http.createServer(async (req, res) => {
         selectedAt: new Date().toISOString()
       });
 
+      const rolls = {
+        ...(state.rolls || {})
+      };
+
+      delete rolls[playerKey];
+
       const newState = {
         ...state,
+        champions: [],
+        rolls,
         selections,
         updatedAt: new Date().toISOString()
       };
@@ -804,9 +838,10 @@ const server = http.createServer(async (req, res) => {
       const newState = {
         version: null,
         champions: [],
+        rolls: {},
         selections: [],
         createdAt: null,
-        updatedAt: new Date().toISOString()
+        updatedAt: null
       };
 
       await writeBraveryState(newState);
