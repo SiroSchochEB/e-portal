@@ -58,6 +58,33 @@ body {
   color: var(--muted);
 }
 
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.nav-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 39px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #c89b3c, #facc15);
+  color: #111827;
+  font-weight: 900;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.nav-button:hover {
+  filter: brightness(1.08);
+}
+
 .status {
   background: rgba(17, 24, 39, 0.85);
   border: 1px solid var(--border);

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Bronze Bravery</title>
+
+  <link rel="stylesheet" href="/bravery/bravery.css?v=3" />
+</head>
+
+<body>
+  <main class="page">
+    <section class="hero">
+      <div>
+        <a class="back-link" href="/">← Dashboard</a>
+
+        <h1>Big Booty Bitches</h1>
+
+        <p>Würfle und lets go</p>
+      </div>
+
+      <div class="status" id="status">Bereit</div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Champions</h2>
+          <p>
+            Eine Runde gilt für alle. Solange eine Runde läuft, kann nicht erneut
+            gewürfelt werden.
+          </p>
+        </div>
+
+        <div class="button-row">
+          <button type="button" id="rollButton">Würfle</button>
+          <button type="button" id="resetButton">Neues Spiel</button>
+        </div>
+      </div>
+
+      <div id="error"></div>
+
+      <div class="role-select" id="roleSelect" style="display: none;">
+        <label>Deine Rolle</label>
+
+        <div class="role-button-row" id="roleButtons">
+          <button type="button" class="role-button" data-role="top">Top</button>
+          <button type="button" class="role-button" data-role="jungle">Jungle</button>
+          <button type="button" class="role-button" data-role="mid">Mid</button>
+          <button type="button" class="role-button" data-role="adc">ADC</button>
+          <button type="button" class="role-button" data-role="support">Support</button>
+        </div>
+
+        <input type="hidden" id="roleInput" value="" />
+      </div>
+
+      <div class="champion-grid" id="champions"></div>
+    </section>
+
+    <section class="panel selection" id="players" style="display: none;"></section>
+  </main>
+
+  <script src="/bravery/bravery.js?v=3" defer></script>
+</body>
+</html>
