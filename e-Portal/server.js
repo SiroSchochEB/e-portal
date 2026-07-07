@@ -133,6 +133,18 @@ const BLOCKED_BUILD_ITEM_IDS = new Set([
   "3871"
 ]);
 
+const SUMMONER_SPELLS = [
+  { id: "flash", name: "Flash", image: "SummonerFlash.png" },
+  { id: "ghost", name: "Ghost", image: "SummonerHaste.png" },
+  { id: "ignite", name: "Ignite", image: "SummonerDot.png" },
+  { id: "exhaust", name: "Exhaust", image: "SummonerExhaust.png" },
+  { id: "heal", name: "Heal", image: "SummonerHeal.png" },
+  { id: "barrier", name: "Barrier", image: "SummonerBarrier.png" },
+  { id: "cleanse", name: "Cleanse", image: "SummonerBoost.png" },
+  { id: "teleport", name: "Teleport", image: "SummonerTeleport.png" },
+  { id: "smite", name: "Smite", image: "SummonerSmite.png" }
+];
+
 async function ensureAccountsFile() {
   await fs.mkdir(path.dirname(ACCOUNTS_FILE), { recursive: true });
 
@@ -894,6 +906,30 @@ async function getRandomRunes(version) {
   };
 }
 
+
+function toPublicSummonerSpell(spell, version) {
+  return {
+    id: spell.id,
+    name: spell.name,
+    imageUrl: `https://ddragon.leagueoflegends.com/cdn/${version}/img/spell/${spell.image}`
+  };
+}
+
+function getRandomSummonerSpells(role, version) {
+  const nonSmiteSpells = SUMMONER_SPELLS.filter(spell => spell.id !== "smite");
+
+  if (role === "jungle") {
+    const smite = SUMMONER_SPELLS.find(spell => spell.id === "smite");
+    const secondSpell = shuffleArray(nonSmiteSpells)[0];
+
+    return [smite, secondSpell].map(spell => toPublicSummonerSpell(spell, version));
+  }
+
+  return shuffleArray(nonSmiteSpells)
+    .slice(0, 2)
+    .map(spell => toPublicSummonerSpell(spell, version));
+}
+
 function sendJson(res, statusCode, data) {
   res.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8"
@@ -1127,6 +1163,7 @@ const server = http.createServer(async (req, res) => {
 
       const itemBuild = await getRandomItems(state.version, role, 6);
       const runeBuild = await getRandomRunes(state.version);
+      const summonerSpells = getRandomSummonerSpells(role, state.version);
 
       if (!itemBuild.starterItem) {
         throw new Error(`Kein Starter Item für Rolle ${role} generiert`);
@@ -1147,6 +1184,7 @@ const server = http.createServer(async (req, res) => {
         starterItem: itemBuild.starterItem,
         items: itemBuild.finalItems,
         runes: runeBuild,
+        summonerSpells,
         selectedAt: new Date().toISOString()
       });
 

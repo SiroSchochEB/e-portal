@@ -75,7 +75,8 @@ function getStateSignature(state) {
       championId: selection.champion?.id,
       role: selection.role,
       items: (selection.items || []).map(item => item.id || item.name),
-      starterItem: selection.starterItem?.id || selection.starterItem?.name || ""
+      starterItem: selection.starterItem?.id || selection.starterItem?.name || "",
+      summonerSpells: (selection.summonerSpells || []).map(spell => spell.id || spell.name)
     }))
   });
 }
@@ -114,6 +115,22 @@ function renderStarterItem(starterItem, extraClass = "", showName = true) {
   `;
 }
 
+function renderSummonerSpells(summonerSpells) {
+  if (!Array.isArray(summonerSpells) || summonerSpells.length === 0) {
+    return "";
+  }
+
+  return `
+    <div class="summoner-spells" aria-label="Summoner Spells">
+      ${summonerSpells.map(spell => `
+        <div class="summoner-spell" title="${escapeHtml(spell.name)}">
+          ${spell.imageUrl ? `<img src="${escapeHtml(spell.imageUrl)}" alt="${escapeHtml(spell.name)}" />` : `<span>${escapeHtml(spell.name)}</span>`}
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderItemBuild(selection, options = {}) {
   const showNames = options.showNames !== false;
   const locked = options.locked === true;
@@ -123,6 +140,7 @@ function renderItemBuild(selection, options = {}) {
       <div class="starter-rune-row">
         ${renderStarterItem(selection.starterItem, locked ? "locked-starter" : "", showNames)}
         ${renderRunes(selection.runes)}
+        ${renderSummonerSpells(selection.summonerSpells)}
       </div>
 
       ${renderItemList(selection.items || [], locked ? "locked-items" : "", showNames)}
@@ -256,8 +274,6 @@ function renderState(state, options = {}) {
           showNames: false,
           locked: true
         })}
-
-        ${renderRunes(currentPlayerSelection.runes)}
 
         <p>Du kannst deine Auswahl in dieser Runde nicht mehr ändern.</p>
       </div>
