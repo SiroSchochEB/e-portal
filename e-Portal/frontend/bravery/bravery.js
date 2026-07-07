@@ -77,23 +77,64 @@ function getStateSignature(state) {
       items: (selection.items || []).map(item => item.id || item.name),
       starterItem: selection.starterItem?.id || selection.starterItem?.name || "",
       summonerSpells: (selection.summonerSpells || []).map(spell => spell.id || spell.name)
-    }))
+    })),
+    itemVotes: state.itemVotes || { byPlayer: {}, byItem: {} }
   });
 }
 
-function renderItemList(items, extraClass = "", showNames = true) {
+function getPlayerKey(playerName) {
+  return String(playerName || "").trim().toLowerCase();
+}
+
+function getItemVoteKey(targetPlayerName, itemId) {
+  return `${getPlayerKey(targetPlayerName)}:${itemId}`;
+}
+
+function getItemVoteCount(targetPlayerName, itemId) {
+  const voteKey = getItemVoteKey(targetPlayerName, itemId);
+  return currentState.itemVotes?.byItem?.[voteKey]?.voters?.length || 0;
+}
+
+function hasCurrentPlayerVoted() {
+  const playerName = localStorage.getItem("braveryPlayerName") || "";
+  return Boolean(currentState.itemVotes?.byPlayer?.[getPlayerKey(playerName)]);
+}
+
+function renderItemList(items, extraClass = "", showNames = true, selection = null) {
   if (!items || items.length === 0) {
     return "";
   }
 
+  const currentPlayerName = localStorage.getItem("braveryPlayerName") || "";
+  const currentPlayerKey = getPlayerKey(currentPlayerName);
+  const targetPlayerKey = getPlayerKey(selection?.playerName || "");
+  const canVoteTarget = Boolean(
+    selection &&
+    currentPlayerKey &&
+    targetPlayerKey &&
+    currentPlayerKey !== targetPlayerKey &&
+    !hasCurrentPlayerVoted() &&
+    getCurrentPlayerSelection(currentState.selections || [])
+  );
+
   return `
     <div class="item-list ${escapeHtml(extraClass)}">
-      ${items.map(item => `
-        <div class="item-card" title="${escapeHtml(item.name)}">
-          <img src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.name)}" />
-          ${showNames ? `<span>${escapeHtml(item.name)}</span>` : ""}
-        </div>
-      `).join("")}
+      ${items.map(item => {
+        const voteCount = selection ? getItemVoteCount(selection.playerName, item.id) : 0;
+        const voteButton = canVoteTarget
+          ? `<button type="button" class="item-vote-button" data-vote-target-player="${escapeHtml(selection.playerName)}" data-vote-item-id="${escapeHtml(item.id)}">Vote ${voteCount}/3</button>`
+          : voteCount > 0
+            ? `<span class="item-vote-count">${voteCount}/3 Votes</span>`
+            : "";
+
+        return `
+          <div class="item-card" title="${escapeHtml(item.name)}">
+            <img src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.name)}" />
+            ${showNames ? `<span>${escapeHtml(item.name)}</span>` : ""}
+            ${voteButton}
+          </div>
+        `;
+      }).join("")}
     </div>
   `;
 }
@@ -139,16 +180,15 @@ function renderItemBuild(selection, options = {}) {
     <div class="item-build ${locked ? "item-build-locked" : ""}">
       <div class="starter-rune-row">
         ${renderStarterItem(selection.starterItem, locked ? "locked-starter" : "", showNames)}
-        ${renderRunes(selection.runes)}
-        ${renderSummonerSpells(selection.summonerSpells)}
+        ${renderRunes(selection.runes, selection.summonerSpells)}
       </div>
 
-      ${renderItemList(selection.items || [], locked ? "locked-items" : "", showNames)}
+      ${renderItemList(selection.items || [], locked ? "locked-items" : "", showNames, selection)}
     </div>
   `;
 }
 
-function renderRunes(runes) {
+function renderRunes(runes, summonerSpells = []) {
   if (!runes) {
     return "";
   }
@@ -167,6 +207,14 @@ function renderRunes(runes) {
           <img src="${escapeHtml(rune.iconUrl)}" alt="${escapeHtml(rune.name)}" />
         </div>
       `).join("")}
+      ${Array.isArray(summonerSpells) && summonerSpells.length > 0 ? `
+        <span class="rune-summoner-divider" aria-hidden="true"></span>
+        ${summonerSpells.map(spell => `
+          <div class="summoner-spell rune-summoner-spell" title="${escapeHtml(spell.name)}">
+            ${spell.imageUrl ? `<img src="${escapeHtml(spell.imageUrl)}" alt="${escapeHtml(spell.name)}" />` : `<span>${escapeHtml(spell.name)}</span>`}
+          </div>
+        `).join("")}
+      ` : ""}
     </div>
   `;
 }
@@ -208,6 +256,10 @@ function renderPlayers(selections) {
       `).join("")}
     </div>
   `;
+
+  document.querySelectorAll("[data-vote-target-player][data-vote-item-id]").forEach(button => {
+    button.addEventListener("click", () => voteItem(button.dataset.voteTargetPlayer, button.dataset.voteItemId));
+  });
 }
 
 function renderState(state, options = {}) {
@@ -420,6 +472,43 @@ async function selectChampion(championId) {
     });
   } catch (error) {
     showError(error.message);
+  }
+}
+
+async function voteItem(targetPlayerName, itemId) {
+  try {
+    clearError();
+
+    const playerName = getPlayerName();
+
+    if (!playerName) {
+      throw new Error("Bitte gib einen Spielernamen ein.");
+    }
+
+    const response = await fetch("/api/bravery/item-vote", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        playerName,
+        targetPlayerName,
+        itemId
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Vote konnte nicht gespeichert werden");
+    }
+
+    renderState(data, {
+      force: true
+    });
+  } catch (error) {
+    showError(error.message);
+    await loadState();
   }
 }
 

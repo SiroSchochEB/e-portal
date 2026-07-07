@@ -183,6 +183,7 @@ async function ensureBraveryStateFile() {
       champions: [],
       rolls: {},
       selections: [],
+      itemVotes: { byPlayer: {}, byItem: {} },
       createdAt: null,
       updatedAt: null
     });
@@ -201,6 +202,7 @@ async function readBraveryState() {
       champions: [],
       rolls: {},
       selections: [],
+      itemVotes: { byPlayer: {}, byItem: {} },
       createdAt: null,
       updatedAt: null
     };
@@ -681,12 +683,12 @@ function getStarterItemsForRole(allItems, role) {
   );
 }
 
-async function getRandomItems(version, role, count = 6) {
+async function getAllBraveryItems(version) {
   const itemData = await fetchDataDragonJson(
     `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/item.json`
   );
 
-  const allItems = Object.entries(itemData.data || {}).map(([id, item]) => ({
+  return Object.entries(itemData.data || {}).map(([id, item]) => ({
     id,
     name: item.name || "Unknown Item",
     description: item.plaintext || "",
@@ -704,6 +706,31 @@ async function getRandomItems(version, role, count = 6) {
     requiredAlly: item.requiredAlly || null,
     specialRecipe: item.specialRecipe || null
   }));
+}
+
+async function getRandomReplacementItem(version, role, existingItems, replacedItem) {
+  const allItems = await getAllBraveryItems(version);
+  const existingIds = new Set((existingItems || [])
+    .filter(item => item && item.id !== replacedItem.id)
+    .map(item => item.id));
+
+  const validFinalItems = allItems
+    .filter(isAllowedFinalBuildItem)
+    .filter(item => !existingIds.has(item.id));
+
+  const shouldKeepBootSlot = replacedItem.itemType === "boots" || isBootItem(replacedItem);
+  const preferredItems = validFinalItems.filter(item => (shouldKeepBootSlot ? isBootItem(item) : !isBootItem(item)));
+  const pool = preferredItems.length > 0 ? preferredItems : validFinalItems;
+
+  if (pool.length === 0) {
+    throw new Error(`Kein Ersatz-Item für Rolle ${role} gefunden`);
+  }
+
+  return toPublicItem(shuffleArray(pool)[0], shouldKeepBootSlot ? "boots" : "final");
+}
+
+async function getRandomItems(version, role, count = 6) {
+  const allItems = await getAllBraveryItems(version);
 
   const starterItems = getStarterItemsForRole(allItems, role);
 
@@ -930,6 +957,21 @@ function getRandomSummonerSpells(role, version) {
     .map(spell => toPublicSummonerSpell(spell, version));
 }
 
+function getSelectionKey(playerName) {
+  return String(playerName || "").trim().toLowerCase();
+}
+
+function getItemVoteKey(targetPlayerName, itemId) {
+  return `${getSelectionKey(targetPlayerName)}:${itemId}`;
+}
+
+function normalizeItemVotes(itemVotes) {
+  return {
+    byPlayer: itemVotes?.byPlayer && typeof itemVotes.byPlayer === "object" ? itemVotes.byPlayer : {},
+    byItem: itemVotes?.byItem && typeof itemVotes.byItem === "object" ? itemVotes.byItem : {}
+  };
+}
+
 function sendJson(res, statusCode, data) {
   res.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8"
@@ -1097,6 +1139,7 @@ const server = http.createServer(async (req, res) => {
           [playerKey]: data.champions
         },
         selections: state.selections || [],
+        itemVotes: state.itemVotes || { byPlayer: {}, byItem: {} },
         createdAt: state.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
@@ -1199,6 +1242,130 @@ const server = http.createServer(async (req, res) => {
         champions: [],
         rolls,
         selections,
+        itemVotes: state.itemVotes || { byPlayer: {}, byItem: {} },
+        updatedAt: new Date().toISOString()
+      };
+
+      await writeBraveryState(newState);
+      sendJson(res, 200, newState);
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/bravery/item-vote") {
+      const body = await readRequestBody(req);
+
+      const playerName = String(body.playerName || "").trim();
+      const targetPlayerName = String(body.targetPlayerName || "").trim();
+      const itemId = String(body.itemId || "").trim();
+
+      if (!playerName) {
+        sendJson(res, 400, {
+          error: "Spielername fehlt"
+        });
+        return;
+      }
+
+      if (!targetPlayerName || !itemId) {
+        sendJson(res, 400, {
+          error: "Zielspieler oder Item fehlt"
+        });
+        return;
+      }
+
+      const voterKey = getSelectionKey(playerName);
+      const targetKey = getSelectionKey(targetPlayerName);
+
+      if (voterKey === targetKey) {
+        sendJson(res, 400, {
+          error: "Du kannst deine eigenen Items nicht voten."
+        });
+        return;
+      }
+
+      const state = await readBraveryState();
+      const selections = state.selections || [];
+      const voterSelection = selections.find(selection => getSelectionKey(selection.playerName) === voterKey);
+      const targetSelection = selections.find(selection => getSelectionKey(selection.playerName) === targetKey);
+
+      if (!voterSelection) {
+        sendJson(res, 400, {
+          error: "Du musst zuerst selbst einen Champion gewählt haben."
+        });
+        return;
+      }
+
+      if (!targetSelection) {
+        sendJson(res, 404, {
+          error: "Zielspieler wurde nicht gefunden."
+        });
+        return;
+      }
+
+      const targetItemIndex = (targetSelection.items || []).findIndex(item => item.id === itemId);
+
+      if (targetItemIndex === -1) {
+        sendJson(res, 404, {
+          error: "Item wurde nicht gefunden."
+        });
+        return;
+      }
+
+      const itemVotes = normalizeItemVotes(state.itemVotes);
+
+      if (itemVotes.byPlayer[voterKey]) {
+        sendJson(res, 400, {
+          error: "Du hast in dieser Runde bereits ein Item gevoted."
+        });
+        return;
+      }
+
+      const targetItem = targetSelection.items[targetItemIndex];
+      const voteKey = getItemVoteKey(targetSelection.playerName, targetItem.id);
+      const now = new Date().toISOString();
+
+      if (!itemVotes.byItem[voteKey]) {
+        itemVotes.byItem[voteKey] = {
+          targetPlayerName: targetSelection.playerName,
+          itemId: targetItem.id,
+          itemName: targetItem.name,
+          voters: [],
+          createdAt: now
+        };
+      }
+
+      itemVotes.byItem[voteKey].voters.push({
+        playerName,
+        votedAt: now
+      });
+
+      itemVotes.byPlayer[voterKey] = {
+        playerName,
+        targetPlayerName: targetSelection.playerName,
+        itemId: targetItem.id,
+        itemName: targetItem.name,
+        votedAt: now
+      };
+
+      if (itemVotes.byItem[voteKey].voters.length >= 3) {
+        const replacementItem = await getRandomReplacementItem(
+          state.version,
+          targetSelection.role,
+          targetSelection.items || [],
+          targetItem
+        );
+
+        targetSelection.items[targetItemIndex] = replacementItem;
+        itemVotes.byItem[voteKey].replacedAt = now;
+        itemVotes.byItem[voteKey].replacementItem = {
+          id: replacementItem.id,
+          name: replacementItem.name
+        };
+      }
+
+      const newState = {
+        ...state,
+        selections,
+        itemVotes,
         updatedAt: new Date().toISOString()
       };
 
@@ -1213,6 +1380,7 @@ const server = http.createServer(async (req, res) => {
         champions: [],
         rolls: {},
         selections: [],
+        itemVotes: { byPlayer: {}, byItem: {} },
         createdAt: null,
         updatedAt: null
       };
