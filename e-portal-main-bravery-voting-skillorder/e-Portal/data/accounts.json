@@ -1,0 +1,38 @@
+[
+  {
+    "label": "Main",
+    "region": "euw1",
+    "gameName": "hated",
+    "tagLine": "123"
+  },
+  {
+    "label": "Mid",
+    "region": "euw1",
+    "gameName": "hated",
+    "tagLine": "mid"
+  },
+  {
+    "label": "Top",
+    "region": "euw1",
+    "gameName": "hated",
+    "tagLine": "top"
+  },
+  {
+    "label": "Jungle",
+    "region": "euw1",
+    "gameName": "legalee blind",
+    "tagLine": "euw"
+  },
+  {
+    "label": "Fill",
+    "region": "euw1",
+    "gameName": "fills bad man",
+    "tagLine": "fill"
+  },
+  {
+    "label": "Mika",
+    "region": "euw1",
+    "gameName": "Gnogger",
+    "tagLine": "euw"
+  }
+]

@@ -1,0 +1,21 @@
+services:
+  backend:
+    build: ./backend
+    container_name: lol-rank-backend
+    ports:
+      - "3000:3000"
+    environment:
+      RIOT_API_KEY: "${RIOT_API_KEY}"
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      ACCOUNTS_FILE: "/app/data/accounts.json"
+      BRAVERY_STATE_FILE: "/app/data/bravery.json"
+    volumes:
+      - ./backend/data:/app/data
+
+  frontend:
+    build: ./frontend
+    container_name: lol-rank-frontend
+    ports:
+      - "4200:80"
+    depends_on:
+      - backend

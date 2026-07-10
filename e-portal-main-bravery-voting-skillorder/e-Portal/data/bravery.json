@@ -1,0 +1,212 @@
+{
+  "version": "16.13.1",
+  "champions": [],
+  "rolls": {},
+  "selections": [
+    {
+      "playerName": "DSADA",
+      "role": "support",
+      "champion": {
+        "id": "Camille",
+        "key": "164",
+        "name": "Camille",
+        "title": "der stählerne Schatten",
+        "imageUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/champion/Camille.png",
+        "splashUrl": "https://ddragon.leagueoflegends.com/cdn/img/champion/splash/Camille_0.jpg"
+      },
+      "starterItem": {
+        "id": "3871",
+        "name": "Zaz'Zak's Realmspike",
+        "description": "",
+        "imageUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/item/3871.png",
+        "gold": 400,
+        "tags": [
+          "Health",
+          "HealthRegen",
+          "ManaRegen",
+          "Vision",
+          "GoldPer",
+          "Lane"
+        ],
+        "itemType": "support-final"
+      },
+      "items": [
+        {
+          "id": "3174",
+          "name": "Armored Advance",
+          "description": "Deal damage to empower your heals and shields",
+          "imageUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/item/3174.png",
+          "gold": 1200,
+          "tags": [
+            "Armor",
+            "Boots"
+          ],
+          "itemType": "boots"
+        },
+        {
+          "id": "2520",
+          "name": "Bastionbreaker",
+          "description": "",
+          "imageUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/item/2520.png",
+          "gold": 3200,
+          "tags": [
+            "Damage",
+            "ArmorPenetration",
+            "AbilityHaste"
+          ],
+          "itemType": "final"
+        },
+        {
+          "id": "3119",
+          "name": "Winter's Approach",
+          "description": "",
+          "imageUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/item/3119.png",
+          "gold": 2400,
+          "tags": [
+            "Health",
+            "Mana",
+            "AbilityHaste"
+          ],
+          "itemType": "final"
+        },
+        {
+          "id": "8010",
+          "name": "Bloodletter's Curse",
+          "description": "",
+          "imageUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/item/8010.png",
+          "gold": 2900,
+          "tags": [
+            "Health",
+            "SpellDamage",
+            "CooldownReduction",
+            "MagicPenetration"
+          ],
+          "itemType": "final"
+        },
+        {
+          "id": "3078",
+          "name": "Trinity Force",
+          "description": "Tons of Damage",
+          "imageUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/item/3078.png",
+          "gold": 3333,
+          "tags": [
+            "Health",
+            "Damage",
+            "AttackSpeed",
+            "CooldownReduction",
+            "OnHit",
+            "NonbootsMovement",
+            "AbilityHaste"
+          ],
+          "itemType": "final"
+        },
+        {
+          "id": "3161",
+          "name": "Spear of Shojin",
+          "description": "Reduce damage taken from champions by a flat amount. Attack while near multiple enemy champions to increase this amount for a short time.",
+          "imageUrl": "https://ddragon.leagueoflegends.com/cdn/16.13.1/img/item/3161.png",
+          "gold": 3100,
+          "tags": [
+            "Health",
+            "Damage",
+            "AbilityHaste"
+          ],
+          "itemType": "final"
+        }
+      ],
+      "runes": {
+        "primaryStyle": {
+          "id": 8000,
+          "key": "Precision",
+          "name": "Precision",
+          "iconUrl": "https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/7201_Precision.png"
+        },
+        "secondaryStyle": {
+          "id": 8400,
+          "key": "Resolve",
+          "name": "Resolve",
+          "iconUrl": "https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/7204_Resolve.png"
+        },
+        "keystone": {
+          "id": 8008,
+          "key": "LethalTempo",
+          "name": "Lethal Tempo",
+          "shortDesc": "Attacking an enemy champion grants you Attack Speed, up to 6 stacks. At max stacks, deal <lol-uikit-tooltipped-keyword key='LinkTooltip_Description_AdaptiveDmg'><font color='#48C4B7'>bonus adaptive damage</font></lol-uikit-tooltipped-keyword> On-Attack.",
+          "longDesc": "Attacking an enemy champion grants you [6% Melee || 4% Ranged] Attack Speed for 6 seconds, up to 6. At max stacks, deal [9 - 30 Melee || 6 - 24 Ranged] <lol-uikit-tooltipped-keyword key='LinkTooltip_Description_AdaptiveDmg'>bonus adaptive damage On-Attack, increased by 1% per 1% Bonus Attack Speed</lol-uikit-tooltipped-keyword>.",
+          "iconUrl": "https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/Precision/LethalTempo/LethalTempoTemp.png"
+        },
+        "primaryRunes": [
+          {
+            "id": 9111,
+            "key": "Triumph",
+            "name": "Triumph",
+            "shortDesc": "<lol-uikit-tooltipped-keyword key='LinkTooltip_Description_Takedown'>Takedowns</lol-uikit-tooltipped-keyword> restore 5% of your missing health and grant an additional 20 gold. ",
+            "longDesc": "Takedowns restore 5% of your missing health, 2.5% of your max health, and grant an additional 20 gold. <br><br><hr><br><i>'The most dangerous game brings the greatest glory.' <br>—Noxian Reckoner</i>",
+            "iconUrl": "https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/Precision/Triumph.png"
+          },
+          {
+            "id": 9104,
+            "key": "LegendAlacrity",
+            "name": "Legend: Alacrity",
+            "shortDesc": "<lol-uikit-tooltipped-keyword key='LinkTooltip_Description_Takedown'>Takedowns</lol-uikit-tooltipped-keyword> on enemies grant permanent <b>Attack Speed</b>. ",
+            "longDesc": "Gain 3% attack speed plus an additional 1.5% for every <i>Legend</i> stack (<statGood>max 10 stacks</statGood>).<br><br>Earn progress toward <i>Legend</i> stacks for every champion takedown, epic monster takedown, large monster kill, and minion kill.",
+            "iconUrl": "https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/Precision/LegendAlacrity/LegendAlacrity.png"
+          },
+          {
+            "id": 8017,
+            "key": "CutDown",
+            "name": "Cut Down",
+            "shortDesc": "Deal more damage to high health enemy champions.",
+            "longDesc": "Deal 8% more damage to champions who have more than 60% health.",
+            "iconUrl": "https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/Precision/CutDown/CutDown.png"
+          }
+        ],
+        "secondaryRunes": [
+          {
+            "id": 8446,
+            "key": "Demolish",
+            "name": "Demolish",
+            "shortDesc": "Your third attack against turrets deals bonus damage.",
+            "longDesc": "Your third attack against towers deals [85 (+28% max Health) Melee || 50 (+20% max Health) Ranged] bonus physical damage.<br><br>Cooldown: 30s",
+            "iconUrl": "https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/Resolve/Demolish/Demolish.png"
+          },
+          {
+            "id": 8473,
+            "key": "BonePlating",
+            "name": "Bone Plating",
+            "shortDesc": "After taking damage from an enemy champion, the next 3 spells or attacks you receive from them deal 30-60 (based on level) less damage.<br><br>Duration: 1.5s<br>Cooldown: 55s",
+            "longDesc": "After taking damage from an enemy champion, the next 3 spells or attacks you receive from them deal 30-60 (based on level) less damage.<br><br>Duration: 1.5s<br>Cooldown: 55s",
+            "iconUrl": "https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/Resolve/BonePlating/BonePlating.png"
+          }
+        ],
+        "statShards": [
+          {
+            "id": "shard-offense-attack-speed",
+            "name": "Attack Speed",
+            "iconUrl": "https://ddragon.leagueoflegends.com/cdn/img/perk-images/StatMods/StatModsAttackSpeedIcon.png"
+          },
+          {
+            "id": "shard-flex-move-speed",
+            "name": "Move Speed",
+            "iconUrl": "https://ddragon.leagueoflegends.com/cdn/img/perk-images/StatMods/StatModsMovementSpeedIcon.png"
+          },
+          {
+            "id": "shard-defense-health-scaling",
+            "name": "Scaling Health",
+            "iconUrl": "https://ddragon.leagueoflegends.com/cdn/img/perk-images/StatMods/StatModsHealthScalingIcon.png"
+          }
+        ]
+      },
+      "selectedAt": "2026-07-06T18:29:53.865Z",
+      "skillOrder": [
+        "W",
+        "E",
+        "Q"
+      ]
+    }
+  ],
+  "createdAt": "2026-07-06T18:29:50.895Z",
+  "updatedAt": "2026-07-06T18:29:53.865Z",
+  "itemVotes": [],
+  "lastItemReroll": null
+}
