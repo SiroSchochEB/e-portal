@@ -1,7 +1,8 @@
 let currentState = {
   champions: [],
   rolls: {},
-  selections: []
+  selections: [],
+  itemVotes: []
 };
 
 let selectedRole = "";
@@ -22,6 +23,10 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function normalizePlayerName(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
 function getPlayerName() {
@@ -45,7 +50,7 @@ function getCurrentPlayerSelection(selections) {
   if (!playerName) return null;
 
   return (selections || []).find(
-    selection => selection.playerName.toLowerCase() === playerName.toLowerCase()
+    selection => normalizePlayerName(selection.playerName) === normalizePlayerName(playerName)
   );
 }
 
@@ -63,75 +68,115 @@ function clearError() {
 
 function getStateSignature(state) {
   const playerName = localStorage.getItem("braveryPlayerName") || "";
-  const playerKey = playerName.toLowerCase();
+  const playerKey = normalizePlayerName(playerName);
   const playerRoll = state.rolls?.[playerKey] || [];
 
   return JSON.stringify({
     version: state.version || "",
     playerName,
     playerRoll: playerRoll.map(champion => champion.id),
+    itemVotes: (state.itemVotes || []).map(vote => [
+      vote.voterKey,
+      vote.targetPlayerKey,
+      vote.itemIndex,
+      vote.itemId
+    ]),
+    lastItemReroll: state.lastItemReroll?.eventId || "",
     selections: (state.selections || []).map(selection => ({
       playerName: selection.playerName,
       championId: selection.champion?.id,
       role: selection.role,
       items: (selection.items || []).map(item => item.id || item.name),
       starterItem: selection.starterItem?.id || selection.starterItem?.name || "",
-      summonerSpells: (selection.summonerSpells || []).map(spell => spell.id || spell.name)
-    })),
-    itemVotes: state.itemVotes || { byPlayer: {}, byItem: {} }
+      summonerSpells: (selection.summonerSpells || []).map(spell => spell.id || spell.name),
+      skillOrder: selection.skillOrder || []
+    }))
   });
 }
 
-function getPlayerKey(playerName) {
-  return String(playerName || "").trim().toLowerCase();
+function getItemVoteCount(selection, item, itemIndex) {
+  const targetPlayerKey = normalizePlayerName(selection.playerName);
+
+  return (currentState.itemVotes || []).filter(vote =>
+    vote.targetPlayerKey === targetPlayerKey &&
+    Number(vote.itemIndex) === Number(itemIndex) &&
+    String(vote.itemId) === String(item.id)
+  ).length;
 }
 
-function getItemVoteKey(targetPlayerName, itemId) {
-  return `${getPlayerKey(targetPlayerName)}:${itemId}`;
+function getUsedVoteCount(playerName) {
+  const voterKey = normalizePlayerName(playerName);
+
+  return (currentState.itemVotes || []).filter(vote => vote.voterKey === voterKey).length;
 }
 
-function getItemVoteCount(targetPlayerName, itemId) {
-  const voteKey = getItemVoteKey(targetPlayerName, itemId);
-  return currentState.itemVotes?.byItem?.[voteKey]?.voters?.length || 0;
+function hasVotedForItem(playerName, selection, item, itemIndex) {
+  const voterKey = normalizePlayerName(playerName);
+  const targetPlayerKey = normalizePlayerName(selection.playerName);
+
+  return (currentState.itemVotes || []).some(vote =>
+    vote.voterKey === voterKey &&
+    vote.targetPlayerKey === targetPlayerKey &&
+    Number(vote.itemIndex) === Number(itemIndex) &&
+    String(vote.itemId) === String(item.id)
+  );
 }
 
-function hasCurrentPlayerVoted() {
-  const playerName = localStorage.getItem("braveryPlayerName") || "";
-  return Boolean(currentState.itemVotes?.byPlayer?.[getPlayerKey(playerName)]);
+function isLastRerolledItem(selection, item, itemIndex) {
+  const event = currentState.lastItemReroll;
+
+  if (!event) return false;
+
+  return (
+    event.targetPlayerKey === normalizePlayerName(selection.playerName) &&
+    Number(event.itemIndex) === Number(itemIndex) &&
+    String(event.newItemId) === String(item.id)
+  );
 }
 
-function renderItemList(items, extraClass = "", showNames = true, selection = null) {
-  if (!items || items.length === 0) {
+function renderItemList(selection, extraClass = "", showNames = true) {
+  const items = selection.items || [];
+
+  if (items.length === 0) {
     return "";
   }
 
   const currentPlayerName = localStorage.getItem("braveryPlayerName") || "";
-  const currentPlayerKey = getPlayerKey(currentPlayerName);
-  const targetPlayerKey = getPlayerKey(selection?.playerName || "");
-  const canVoteTarget = Boolean(
-    selection &&
-    currentPlayerKey &&
-    targetPlayerKey &&
-    currentPlayerKey !== targetPlayerKey &&
-    !hasCurrentPlayerVoted() &&
-    getCurrentPlayerSelection(currentState.selections || [])
-  );
+  const usedVotes = getUsedVoteCount(currentPlayerName);
+  const isOwnSelection = normalizePlayerName(selection.playerName) === normalizePlayerName(currentPlayerName);
 
   return `
     <div class="item-list ${escapeHtml(extraClass)}">
-      ${items.map(item => {
-        const voteCount = selection ? getItemVoteCount(selection.playerName, item.id) : 0;
-        const voteButton = canVoteTarget
-          ? `<button type="button" class="item-vote-button" data-vote-target-player="${escapeHtml(selection.playerName)}" data-vote-item-id="${escapeHtml(item.id)}">Vote ${voteCount}/3</button>`
-          : voteCount > 0
-            ? `<span class="item-vote-count">${voteCount}/3 Votes</span>`
-            : "";
+      ${items.map((item, itemIndex) => {
+        const voteCount = getItemVoteCount(selection, item, itemIndex);
+        const voteClass = voteCount >= 2 ? "item-vote-hot" : voteCount === 1 ? "item-vote-warm" : "";
+        const hasAlreadyVoted = hasVotedForItem(currentPlayerName, selection, item, itemIndex);
+        const canVote = currentPlayerName && !isOwnSelection && usedVotes < 2 && !hasAlreadyVoted;
+        const rerollClass = isLastRerolledItem(selection, item, itemIndex) ? "item-rerolled" : "";
+        const titleParts = [item.name];
+
+        if (voteCount > 0) {
+          titleParts.push(`${voteCount} Vote${voteCount === 1 ? "" : "s"}`);
+        }
+
+        if (hasAlreadyVoted) {
+          titleParts.push("von dir gevoted");
+        }
 
         return `
-          <div class="item-card" title="${escapeHtml(item.name)}">
+          <div class="item-card ${voteClass} ${rerollClass}" title="${escapeHtml(titleParts.join(" · "))}">
             <img src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.name)}" />
             ${showNames ? `<span>${escapeHtml(item.name)}</span>` : ""}
-            ${voteButton}
+            ${canVote ? `
+              <button
+                type="button"
+                class="item-vote-button"
+                data-vote-player="${escapeHtml(selection.playerName)}"
+                data-vote-index="${itemIndex}"
+                aria-label="Gegen ${escapeHtml(item.name)} voten"
+              >Vote</button>
+            ` : ""}
+            ${!canVote && voteCount > 0 ? `<span class="item-vote-dot" aria-label="${voteCount} Votes"></span>` : ""}
           </div>
         `;
       }).join("")}
@@ -161,13 +206,48 @@ function renderSummonerSpells(summonerSpells) {
     return "";
   }
 
+  return summonerSpells.map(spell => `
+    <div class="summoner-spell" title="${escapeHtml(spell.name)}">
+      ${spell.imageUrl ? `<img src="${escapeHtml(spell.imageUrl)}" alt="${escapeHtml(spell.name)}" />` : `<span>${escapeHtml(spell.name)}</span>`}
+    </div>
+  `).join("");
+}
+
+function renderSkillOrder(skillOrder) {
+  if (!Array.isArray(skillOrder) || skillOrder.length === 0) {
+    return "";
+  }
+
   return `
-    <div class="summoner-spells" aria-label="Summoner Spells">
-      ${summonerSpells.map(spell => `
-        <div class="summoner-spell" title="${escapeHtml(spell.name)}">
-          ${spell.imageUrl ? `<img src="${escapeHtml(spell.imageUrl)}" alt="${escapeHtml(spell.name)}" />` : `<span>${escapeHtml(spell.name)}</span>`}
+    <div class="skill-order" title="Max-Reihenfolge ohne R">
+      <span>Skill</span>
+      ${skillOrder.map((spell, index) => `
+        <strong>${escapeHtml(spell)}</strong>${index < skillOrder.length - 1 ? `<em>›</em>` : ""}
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderRunes(runes, summonerSpells) {
+  if (!runes && (!Array.isArray(summonerSpells) || summonerSpells.length === 0)) {
+    return "";
+  }
+
+  const allRunes = runes ? [
+    runes.keystone,
+    ...(runes.primaryRunes || []),
+    ...(runes.secondaryRunes || []),
+    ...(runes.statShards || [])
+  ].filter(Boolean) : [];
+
+  return `
+    <div class="rune-build compact-runes">
+      ${allRunes.map(rune => `
+        <div class="rune-icon" title="${escapeHtml(rune.name)}">
+          <img src="${escapeHtml(rune.iconUrl)}" alt="${escapeHtml(rune.name)}" />
         </div>
       `).join("")}
+      ${renderSummonerSpells(summonerSpells)}
     </div>
   `;
 }
@@ -181,42 +261,20 @@ function renderItemBuild(selection, options = {}) {
       <div class="starter-rune-row">
         ${renderStarterItem(selection.starterItem, locked ? "locked-starter" : "", showNames)}
         ${renderRunes(selection.runes, selection.summonerSpells)}
+        ${renderSkillOrder(selection.skillOrder)}
       </div>
 
-      ${renderItemList(selection.items || [], locked ? "locked-items" : "", showNames, selection)}
+      ${renderItemList(selection, locked ? "locked-items" : "", showNames)}
     </div>
   `;
 }
 
-function renderRunes(runes, summonerSpells = []) {
-  if (!runes) {
-    return "";
-  }
-
-  const allRunes = [
-    runes.keystone,
-    ...(runes.primaryRunes || []),
-    ...(runes.secondaryRunes || []),
-    ...(runes.statShards || [])
-  ].filter(Boolean);
-
-  return `
-    <div class="rune-build compact-runes">
-      ${allRunes.map(rune => `
-        <div class="rune-icon" title="${escapeHtml(rune.name)}">
-          <img src="${escapeHtml(rune.iconUrl)}" alt="${escapeHtml(rune.name)}" />
-        </div>
-      `).join("")}
-      ${Array.isArray(summonerSpells) && summonerSpells.length > 0 ? `
-        <span class="rune-summoner-divider" aria-hidden="true"></span>
-        ${summonerSpells.map(spell => `
-          <div class="summoner-spell rune-summoner-spell" title="${escapeHtml(spell.name)}">
-            ${spell.imageUrl ? `<img src="${escapeHtml(spell.imageUrl)}" alt="${escapeHtml(spell.name)}" />` : `<span>${escapeHtml(spell.name)}</span>`}
-          </div>
-        `).join("")}
-      ` : ""}
-    </div>
-  `;
+function attachVoteHandlers() {
+  document.querySelectorAll("[data-vote-player]").forEach(button => {
+    button.addEventListener("click", () => {
+      voteItem(button.dataset.votePlayer, Number(button.dataset.voteIndex));
+    });
+  });
 }
 
 function renderPlayers(selections) {
@@ -257,9 +315,7 @@ function renderPlayers(selections) {
     </div>
   `;
 
-  document.querySelectorAll("[data-vote-target-player][data-vote-item-id]").forEach(button => {
-    button.addEventListener("click", () => voteItem(button.dataset.voteTargetPlayer, button.dataset.voteItemId));
-  });
+  attachVoteHandlers();
 }
 
 function renderState(state, options = {}) {
@@ -278,7 +334,7 @@ function renderState(state, options = {}) {
   const roleSelect = document.getElementById("roleSelect");
 
   const playerName = localStorage.getItem("braveryPlayerName") || "";
-  const playerKey = playerName.toLowerCase();
+  const playerKey = normalizePlayerName(playerName);
   const champions = state.rolls?.[playerKey] || [];
   const selections = state.selections || [];
   const currentPlayerSelection = getCurrentPlayerSelection(selections);
@@ -292,7 +348,9 @@ function renderState(state, options = {}) {
     renderPlayers(selections);
 
     if (selections.length > 0) {
-      setStatus(`Patch ${state.version || "unbekannt"} · Runde läuft`);
+      const usedVotes = getUsedVoteCount(playerName);
+      const voteText = currentPlayerSelection ? ` · Votes ${usedVotes}/2` : "";
+      setStatus(`Patch ${state.version || "unbekannt"} · Runde läuft${voteText}`);
     } else {
       setStatus("Bereit");
     }
@@ -356,7 +414,10 @@ function renderState(state, options = {}) {
   }
 
   renderPlayers(selections);
-  setStatus(`Patch ${state.version || "unbekannt"} · Runde läuft`);
+
+  const usedVotes = getUsedVoteCount(playerName);
+  const voteText = currentPlayerSelection ? ` · Votes ${usedVotes}/2` : "";
+  setStatus(`Patch ${state.version || "unbekannt"} · Runde läuft${voteText}`);
 }
 
 async function loadState() {
@@ -475,7 +536,7 @@ async function selectChampion(championId) {
   }
 }
 
-async function voteItem(targetPlayerName, itemId) {
+async function voteItem(targetPlayerName, itemIndex) {
   try {
     clearError();
 
@@ -493,7 +554,7 @@ async function voteItem(targetPlayerName, itemId) {
       body: JSON.stringify({
         playerName,
         targetPlayerName,
-        itemId
+        itemIndex
       })
     });
 
@@ -503,18 +564,16 @@ async function voteItem(targetPlayerName, itemId) {
       throw new Error(data.error || "Vote konnte nicht gespeichert werden");
     }
 
-    renderState(data, {
-      force: true
-    });
+    lastRenderedSignature = "";
+    renderState(data, { force: true });
   } catch (error) {
     showError(error.message);
-    await loadState();
   }
 }
 
 async function resetGame() {
   const confirmed = confirm(
-    "Möchtest du wirklich ein neues Spiel starten?\n\nAlle gewürfelten Champions, Items und Runen werden gelöscht."
+    "Möchtest du wirklich ein neues Spiel starten?\n\nAlle gewürfelten Champions, Items, Runen, Summoner Spells, Skill Orders und Votes werden gelöscht."
   );
 
   if (!confirmed) {

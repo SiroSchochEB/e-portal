@@ -197,13 +197,16 @@
           }
         ]
       },
-      "selectedAt": "2026-07-06T18:29:53.865Z"
+      "selectedAt": "2026-07-06T18:29:53.865Z",
+      "skillOrder": [
+        "W",
+        "E",
+        "Q"
+      ]
     }
   ],
   "createdAt": "2026-07-06T18:29:50.895Z",
   "updatedAt": "2026-07-06T18:29:53.865Z",
-  "itemVotes": {
-    "byPlayer": {},
-    "byItem": {}
-  }
+  "itemVotes": [],
+  "lastItemReroll": null
 }
