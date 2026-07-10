@@ -585,3 +585,44 @@ button:disabled {
   object-fit: contain;
   display: block;
 }
+.rune-summoner-divider {
+  width: 1px;
+  height: 34px;
+  margin: 0 2px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.rune-summoner-spell {
+  background: transparent;
+  border: 0;
+}
+
+.rune-summoner-spell img {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+}
+
+.item-vote-button {
+  margin-top: 4px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1;
+  background: rgba(143, 167, 255, 0.18);
+  color: #dce4ff;
+  border: 1px solid rgba(143, 167, 255, 0.35);
+}
+
+.item-vote-button:hover {
+  filter: none;
+  background: rgba(143, 167, 255, 0.28);
+}
+
+.item-vote-count {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1;
+  color: #cfd6f6;
+  opacity: 0.8;
+}

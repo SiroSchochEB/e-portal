@@ -201,5 +201,9 @@
     }
   ],
   "createdAt": "2026-07-06T18:29:50.895Z",
-  "updatedAt": "2026-07-06T18:29:53.865Z"
+  "updatedAt": "2026-07-06T18:29:53.865Z",
+  "itemVotes": {
+    "byPlayer": {},
+    "byItem": {}
+  }
 }
