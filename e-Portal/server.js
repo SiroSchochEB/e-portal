@@ -183,7 +183,8 @@ async function ensureBraveryStateFile() {
       champions: [],
       rolls: {},
       selections: [],
-      itemVotes: { byPlayer: {}, byItem: {} },
+      itemVotes: [],
+      lastItemReroll: null,
       createdAt: null,
       updatedAt: null
     });
@@ -202,7 +203,8 @@ async function readBraveryState() {
       champions: [],
       rolls: {},
       selections: [],
-      itemVotes: { byPlayer: {}, byItem: {} },
+      itemVotes: [],
+      lastItemReroll: null,
       createdAt: null,
       updatedAt: null
     };
@@ -683,12 +685,12 @@ function getStarterItemsForRole(allItems, role) {
   );
 }
 
-async function getAllBraveryItems(version) {
+async function getRandomItems(version, role, count = 6) {
   const itemData = await fetchDataDragonJson(
     `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/item.json`
   );
 
-  return Object.entries(itemData.data || {}).map(([id, item]) => ({
+  const allItems = Object.entries(itemData.data || {}).map(([id, item]) => ({
     id,
     name: item.name || "Unknown Item",
     description: item.plaintext || "",
@@ -706,31 +708,6 @@ async function getAllBraveryItems(version) {
     requiredAlly: item.requiredAlly || null,
     specialRecipe: item.specialRecipe || null
   }));
-}
-
-async function getRandomReplacementItem(version, role, existingItems, replacedItem) {
-  const allItems = await getAllBraveryItems(version);
-  const existingIds = new Set((existingItems || [])
-    .filter(item => item && item.id !== replacedItem.id)
-    .map(item => item.id));
-
-  const validFinalItems = allItems
-    .filter(isAllowedFinalBuildItem)
-    .filter(item => !existingIds.has(item.id));
-
-  const shouldKeepBootSlot = replacedItem.itemType === "boots" || isBootItem(replacedItem);
-  const preferredItems = validFinalItems.filter(item => (shouldKeepBootSlot ? isBootItem(item) : !isBootItem(item)));
-  const pool = preferredItems.length > 0 ? preferredItems : validFinalItems;
-
-  if (pool.length === 0) {
-    throw new Error(`Kein Ersatz-Item für Rolle ${role} gefunden`);
-  }
-
-  return toPublicItem(shuffleArray(pool)[0], shouldKeepBootSlot ? "boots" : "final");
-}
-
-async function getRandomItems(version, role, count = 6) {
-  const allItems = await getAllBraveryItems(version);
 
   const starterItems = getStarterItemsForRole(allItems, role);
 
@@ -957,19 +934,65 @@ function getRandomSummonerSpells(role, version) {
     .map(spell => toPublicSummonerSpell(spell, version));
 }
 
-function getSelectionKey(playerName) {
+function getRandomSkillOrder() {
+  return shuffleArray(["Q", "W", "E"]);
+}
+
+async function getRandomReplacementItem(version, currentItems, currentItem) {
+  const itemData = await fetchDataDragonJson(
+    `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/item.json`
+  );
+
+  const allItems = Object.entries(itemData.data || {}).map(([id, item]) => ({
+    id,
+    name: item.name || "Unknown Item",
+    description: item.plaintext || "",
+    imageUrl: `https://ddragon.leagueoflegends.com/cdn/${version}/img/item/${item.image?.full || `${id}.png`}`,
+    gold: item.gold?.total || 0,
+    purchasable: item.gold?.purchasable === true,
+    tags: item.tags || [],
+    maps: item.maps || {},
+    into: item.into || [],
+    from: item.from || [],
+    inStore: item.inStore,
+    consumed: item.consumed,
+    consumeOnFull: item.consumeOnFull,
+    requiredChampion: item.requiredChampion || null,
+    requiredAlly: item.requiredAlly || null,
+    specialRecipe: item.specialRecipe || null
+  }));
+
+  const currentIds = new Set((currentItems || []).map(item => String(item.id)));
+  currentIds.delete(String(currentItem?.id || ""));
+
+  const validItems = allItems
+    .filter(isAllowedFinalBuildItem)
+    .filter(item => !currentIds.has(String(item.id)));
+
+  const sameTypeItems = currentItem?.itemType === "boots"
+    ? validItems.filter(isBootItem)
+    : validItems.filter(item => !isBootItem(item));
+
+  const pool = sameTypeItems.length > 0 ? sameTypeItems : validItems;
+  const replacement = shuffleArray(pool)[0];
+
+  if (!replacement) {
+    throw new Error("Kein gültiges Ersatz-Item gefunden");
+  }
+
+  return toPublicItem(replacement, currentItem?.itemType === "boots" ? "boots" : "final");
+}
+
+function normalizePlayerKey(playerName) {
   return String(playerName || "").trim().toLowerCase();
 }
 
-function getItemVoteKey(targetPlayerName, itemId) {
-  return `${getSelectionKey(targetPlayerName)}:${itemId}`;
-}
-
-function normalizeItemVotes(itemVotes) {
-  return {
-    byPlayer: itemVotes?.byPlayer && typeof itemVotes.byPlayer === "object" ? itemVotes.byPlayer : {},
-    byItem: itemVotes?.byItem && typeof itemVotes.byItem === "object" ? itemVotes.byItem : {}
-  };
+function getActiveItemVotes(state, targetPlayerKey, itemIndex, itemId) {
+  return (state.itemVotes || []).filter(vote =>
+    vote.targetPlayerKey === targetPlayerKey &&
+    Number(vote.itemIndex) === Number(itemIndex) &&
+    String(vote.itemId) === String(itemId)
+  );
 }
 
 function sendJson(res, statusCode, data) {
@@ -1139,7 +1162,6 @@ const server = http.createServer(async (req, res) => {
           [playerKey]: data.champions
         },
         selections: state.selections || [],
-        itemVotes: state.itemVotes || { byPlayer: {}, byItem: {} },
         createdAt: state.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
@@ -1207,6 +1229,7 @@ const server = http.createServer(async (req, res) => {
       const itemBuild = await getRandomItems(state.version, role, 6);
       const runeBuild = await getRandomRunes(state.version);
       const summonerSpells = getRandomSummonerSpells(role, state.version);
+      const skillOrder = getRandomSkillOrder();
 
       if (!itemBuild.starterItem) {
         throw new Error(`Kein Starter Item für Rolle ${role} generiert`);
@@ -1228,6 +1251,7 @@ const server = http.createServer(async (req, res) => {
         items: itemBuild.finalItems,
         runes: runeBuild,
         summonerSpells,
+        skillOrder,
         selectedAt: new Date().toISOString()
       });
 
@@ -1242,7 +1266,6 @@ const server = http.createServer(async (req, res) => {
         champions: [],
         rolls,
         selections,
-        itemVotes: state.itemVotes || { byPlayer: {}, byItem: {} },
         updatedAt: new Date().toISOString()
       };
 
@@ -1256,116 +1279,122 @@ const server = http.createServer(async (req, res) => {
 
       const playerName = String(body.playerName || "").trim();
       const targetPlayerName = String(body.targetPlayerName || "").trim();
-      const itemId = String(body.itemId || "").trim();
+      const itemIndex = Number(body.itemIndex);
 
       if (!playerName) {
-        sendJson(res, 400, {
-          error: "Spielername fehlt"
-        });
+        sendJson(res, 400, { error: "Spielername fehlt" });
         return;
       }
 
-      if (!targetPlayerName || !itemId) {
-        sendJson(res, 400, {
-          error: "Zielspieler oder Item fehlt"
-        });
-        return;
-      }
-
-      const voterKey = getSelectionKey(playerName);
-      const targetKey = getSelectionKey(targetPlayerName);
-
-      if (voterKey === targetKey) {
-        sendJson(res, 400, {
-          error: "Du kannst deine eigenen Items nicht voten."
-        });
+      if (!targetPlayerName || !Number.isInteger(itemIndex)) {
+        sendJson(res, 400, { error: "Ungültiger Vote" });
         return;
       }
 
       const state = await readBraveryState();
       const selections = state.selections || [];
-      const voterSelection = selections.find(selection => getSelectionKey(selection.playerName) === voterKey);
-      const targetSelection = selections.find(selection => getSelectionKey(selection.playerName) === targetKey);
+      const voterKey = normalizePlayerKey(playerName);
+      const targetPlayerKey = normalizePlayerKey(targetPlayerName);
+
+      const voterSelection = selections.find(
+        selection => normalizePlayerKey(selection.playerName) === voterKey
+      );
+      const targetSelection = selections.find(
+        selection => normalizePlayerKey(selection.playerName) === targetPlayerKey
+      );
 
       if (!voterSelection) {
-        sendJson(res, 400, {
-          error: "Du musst zuerst selbst einen Champion gewählt haben."
-        });
+        sendJson(res, 400, { error: "Du musst in dieser Runde zuerst deine Auswahl speichern." });
         return;
       }
 
       if (!targetSelection) {
-        sendJson(res, 404, {
-          error: "Zielspieler wurde nicht gefunden."
-        });
+        sendJson(res, 404, { error: "Zielspieler wurde nicht gefunden." });
         return;
       }
 
-      const targetItemIndex = (targetSelection.items || []).findIndex(item => item.id === itemId);
-
-      if (targetItemIndex === -1) {
-        sendJson(res, 404, {
-          error: "Item wurde nicht gefunden."
-        });
+      if (voterKey === targetPlayerKey) {
+        sendJson(res, 400, { error: "Eigene Items können nicht gevoted werden." });
         return;
       }
 
-      const itemVotes = normalizeItemVotes(state.itemVotes);
+      const targetItems = targetSelection.items || [];
+      const targetItem = targetItems[itemIndex];
 
-      if (itemVotes.byPlayer[voterKey]) {
-        sendJson(res, 400, {
-          error: "Du hast in dieser Runde bereits ein Item gevoted."
-        });
+      if (!targetItem) {
+        sendJson(res, 400, { error: "Item wurde nicht gefunden." });
         return;
       }
 
-      const targetItem = targetSelection.items[targetItemIndex];
-      const voteKey = getItemVoteKey(targetSelection.playerName, targetItem.id);
-      const now = new Date().toISOString();
+      const itemVotes = state.itemVotes || [];
+      const voterVotes = itemVotes.filter(vote => vote.voterKey === voterKey);
 
-      if (!itemVotes.byItem[voteKey]) {
-        itemVotes.byItem[voteKey] = {
-          targetPlayerName: targetSelection.playerName,
-          itemId: targetItem.id,
-          itemName: targetItem.name,
-          voters: [],
-          createdAt: now
-        };
+      if (voterVotes.length >= 2) {
+        sendJson(res, 400, { error: "Du hast deine 2 Votes für diese Runde bereits benutzt." });
+        return;
       }
 
-      itemVotes.byItem[voteKey].voters.push({
-        playerName,
-        votedAt: now
-      });
+      const alreadyVotedForThisItem = itemVotes.some(vote =>
+        vote.voterKey === voterKey &&
+        vote.targetPlayerKey === targetPlayerKey &&
+        Number(vote.itemIndex) === itemIndex &&
+        String(vote.itemId) === String(targetItem.id)
+      );
 
-      itemVotes.byPlayer[voterKey] = {
-        playerName,
+      if (alreadyVotedForThisItem) {
+        sendJson(res, 400, { error: "Du hast dieses Item bereits gevoted." });
+        return;
+      }
+
+      const newVote = {
+        voterKey,
+        voterName: playerName,
+        targetPlayerKey,
         targetPlayerName: targetSelection.playerName,
+        itemIndex,
         itemId: targetItem.id,
         itemName: targetItem.name,
-        votedAt: now
+        votedAt: new Date().toISOString()
       };
 
-      if (itemVotes.byItem[voteKey].voters.length >= 3) {
+      const nextVotes = [...itemVotes, newVote];
+      const activeVotes = getActiveItemVotes(
+        { itemVotes: nextVotes },
+        targetPlayerKey,
+        itemIndex,
+        targetItem.id
+      );
+
+      let lastItemReroll = state.lastItemReroll || null;
+
+      if (activeVotes.length >= 3) {
         const replacementItem = await getRandomReplacementItem(
           state.version,
-          targetSelection.role,
-          targetSelection.items || [],
+          targetItems,
           targetItem
         );
 
-        targetSelection.items[targetItemIndex] = replacementItem;
-        itemVotes.byItem[voteKey].replacedAt = now;
-        itemVotes.byItem[voteKey].replacementItem = {
-          id: replacementItem.id,
-          name: replacementItem.name
+        targetItems[itemIndex] = replacementItem;
+        targetSelection.items = targetItems;
+
+        lastItemReroll = {
+          eventId: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          targetPlayerKey,
+          targetPlayerName: targetSelection.playerName,
+          itemIndex,
+          oldItemId: targetItem.id,
+          oldItemName: targetItem.name,
+          newItemId: replacementItem.id,
+          newItemName: replacementItem.name,
+          at: new Date().toISOString()
         };
       }
 
       const newState = {
         ...state,
         selections,
-        itemVotes,
+        itemVotes: nextVotes,
+        lastItemReroll,
         updatedAt: new Date().toISOString()
       };
 
@@ -1380,7 +1409,8 @@ const server = http.createServer(async (req, res) => {
         champions: [],
         rolls: {},
         selections: [],
-        itemVotes: { byPlayer: {}, byItem: {} },
+        itemVotes: [],
+        lastItemReroll: null,
         createdAt: null,
         updatedAt: null
       };
