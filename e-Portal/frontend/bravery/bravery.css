@@ -668,14 +668,28 @@ button:disabled {
   margin-right: 2px;
 }
 
-.skill-order strong {
+.skill-spell {
   display: inline-grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: 10px;
   background: rgba(143, 167, 255, 0.16);
   border: 1px solid rgba(143, 167, 255, 0.22);
+  overflow: hidden;
+}
+
+.skill-spell img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.skill-spell strong {
+  display: inline-grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
   color: #dbe4ff;
   font-size: 16px;
 }
@@ -747,5 +761,94 @@ button:disabled {
   .item-vote-button {
     position: static;
     margin-top: 3px;
+  }
+}
+
+.player-selection-card-full,
+.player-selection-card.large {
+  position: relative;
+}
+
+.player-selection-card.own-selection {
+  background:
+    linear-gradient(135deg, rgba(143, 167, 255, 0.13), rgba(255, 255, 255, 0.055));
+  border-color: rgba(143, 167, 255, 0.34);
+  box-shadow:
+    inset 0 0 0 1px rgba(143, 167, 255, 0.08),
+    0 0 22px rgba(143, 167, 255, 0.06);
+}
+
+.ban-reroll-button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  padding: 5px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 80, 95, 0.58);
+  background: rgba(255, 80, 95, 0.18);
+  color: #ffd5da;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.24);
+}
+
+.ban-reroll-button:hover {
+  background: rgba(255, 80, 95, 0.30);
+  border-color: rgba(255, 80, 95, 0.86);
+}
+
+.player-rerolled {
+  animation: playerRerollReveal 1600ms ease both;
+}
+
+.player-rerolled .player-selection-main > img {
+  animation: playerChampionFlip 1600ms ease both;
+}
+
+@keyframes playerRerollReveal {
+  0% {
+    opacity: 0.45;
+    transform: translateY(-3px) scale(0.985);
+    filter: blur(2px) brightness(1.25);
+    border-color: rgba(255, 80, 95, 0.75);
+    box-shadow: 0 0 28px rgba(255, 80, 95, 0.26);
+  }
+
+  45% {
+    opacity: 1;
+    transform: translateY(0) scale(1.012);
+    filter: blur(0) brightness(1.18);
+    border-color: rgba(143, 167, 255, 0.72);
+    box-shadow: 0 0 34px rgba(143, 167, 255, 0.26);
+  }
+
+  100% {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+@keyframes playerChampionFlip {
+  0% {
+    transform: rotateY(90deg) scale(0.72);
+  }
+
+  45% {
+    transform: rotateY(0) scale(1.12);
+  }
+
+  100% {
+    transform: rotateY(0) scale(1);
+  }
+}
+
+@media (max-width: 800px) {
+  .ban-reroll-button {
+    top: 8px;
+    right: 8px;
   }
 }

@@ -2,7 +2,8 @@ let currentState = {
   champions: [],
   rolls: {},
   selections: [],
-  itemVotes: []
+  itemVotes: [],
+  resetVotes: []
 };
 
 let selectedRole = "";
@@ -54,6 +55,50 @@ function getCurrentPlayerSelection(selections) {
   );
 }
 
+function getKnownPlayerKeys(state = currentState) {
+  const keys = new Set();
+
+  Object.keys(state.rolls || {}).forEach(key => {
+    const normalized = normalizePlayerName(key);
+    if (normalized) keys.add(normalized);
+  });
+
+  (state.selections || []).forEach(selection => {
+    const normalized = normalizePlayerName(selection.playerName);
+    if (normalized) keys.add(normalized);
+  });
+
+  return [...keys];
+}
+
+function getRequiredResetVotes(state = currentState) {
+  return getKnownPlayerKeys(state).length >= 3 ? 2 : 1;
+}
+
+function getResetVoteCount(state = currentState) {
+  return (state.resetVotes || []).length;
+}
+
+function updateResetButton(state = currentState) {
+  const button = document.getElementById("resetButton");
+  if (!button) return;
+
+  const requiredVotes = getRequiredResetVotes(state);
+  const voteCount = getResetVoteCount(state);
+
+  button.textContent = requiredVotes > 1
+    ? `Neues Spiel ${Math.min(voteCount, requiredVotes)}/${requiredVotes}`
+    : "Neues Spiel";
+}
+
+function isLastPlayerReroll(selection) {
+  const event = currentState.lastPlayerReroll;
+
+  if (!event) return false;
+
+  return event.playerKey === normalizePlayerName(selection.playerName);
+}
+
 function setStatus(text) {
   document.getElementById("status").textContent = text;
 }
@@ -81,7 +126,9 @@ function getStateSignature(state) {
       vote.itemIndex,
       vote.itemId
     ]),
+    resetVotes: (state.resetVotes || []).map(vote => vote.voterKey),
     lastItemReroll: state.lastItemReroll?.eventId || "",
+    lastPlayerReroll: state.lastPlayerReroll?.eventId || "",
     selections: (state.selections || []).map(selection => ({
       playerName: selection.playerName,
       championId: selection.champion?.id,
@@ -89,7 +136,7 @@ function getStateSignature(state) {
       items: (selection.items || []).map(item => item.id || item.name),
       starterItem: selection.starterItem?.id || selection.starterItem?.name || "",
       summonerSpells: (selection.summonerSpells || []).map(spell => spell.id || spell.name),
-      skillOrder: selection.skillOrder || []
+      skillOrder: (selection.skillOrder || []).map(spell => spell.id || spell.key || spell.name || spell)
     }))
   });
 }
@@ -221,10 +268,39 @@ function renderSkillOrder(skillOrder) {
   return `
     <div class="skill-order" title="Max-Reihenfolge ohne R">
       <span>Skill</span>
-      ${skillOrder.map((spell, index) => `
-        <strong>${escapeHtml(spell)}</strong>${index < skillOrder.length - 1 ? `<em>›</em>` : ""}
-      `).join("")}
+      ${skillOrder.map((spell, index) => {
+        const spellData = typeof spell === "string" ? { key: spell, name: spell } : spell;
+        const spellLabel = spellData.key
+          ? `${spellData.key}: ${spellData.name || spellData.key}`
+          : spellData.name || "Spell";
+
+        return `
+          <div class="skill-spell" title="${escapeHtml(spellLabel)}">
+            ${spellData.imageUrl
+              ? `<img src="${escapeHtml(spellData.imageUrl)}" alt="${escapeHtml(spellLabel)}" />`
+              : `<strong>${escapeHtml(spellData.key || spellData.name || "?")}</strong>`}
+          </div>${index < skillOrder.length - 1 ? `<em>›</em>` : ""}
+        `;
+      }).join("")}
     </div>
+  `;
+}
+
+function renderBanButton(selection) {
+  const currentPlayerName = localStorage.getItem("braveryPlayerName") || "";
+  const isOwnSelection = normalizePlayerName(selection.playerName) === normalizePlayerName(currentPlayerName);
+
+  if (!isOwnSelection) {
+    return "";
+  }
+
+  return `
+    <button
+      type="button"
+      class="ban-reroll-button"
+      data-ban-reroll="${escapeHtml(selection.playerName)}"
+      title="Champion ist banned: deinen kompletten Build neu würfeln"
+    >Banned</button>
   `;
 }
 
@@ -275,6 +351,12 @@ function attachVoteHandlers() {
       voteItem(button.dataset.votePlayer, Number(button.dataset.voteIndex));
     });
   });
+
+  document.querySelectorAll("[data-ban-reroll]").forEach(button => {
+    button.addEventListener("click", () => {
+      rerollOwnBuild();
+    });
+  });
 }
 
 function renderPlayers(selections) {
@@ -292,8 +374,15 @@ function renderPlayers(selections) {
     <h3>Ausgewählte Champions</h3>
 
     <div class="player-selection-list">
-      ${selections.map(selection => `
-        <div class="player-selection-card player-selection-card-full">
+      ${selections.map(selection => {
+        const currentPlayerName = localStorage.getItem("braveryPlayerName") || "";
+        const isOwnSelection = normalizePlayerName(selection.playerName) === normalizePlayerName(currentPlayerName);
+        const rerollClass = isLastPlayerReroll(selection) ? "player-rerolled" : "";
+
+        return `
+        <div class="player-selection-card player-selection-card-full ${isOwnSelection ? "own-selection" : ""} ${rerollClass}">
+          ${renderBanButton(selection)}
+
           <div class="player-selection-main">
             <img
               src="${escapeHtml(selection.champion.imageUrl || selection.champion.splashUrl)}"
@@ -311,7 +400,7 @@ function renderPlayers(selections) {
 
           ${renderItemBuild(selection, { showNames: true })}
         </div>
-      `).join("")}
+      `}).join("")}
     </div>
   `;
 
@@ -320,6 +409,7 @@ function renderPlayers(selections) {
 
 function renderState(state, options = {}) {
   currentState = state;
+  updateResetButton(state);
 
   const signature = getStateSignature(state);
 
@@ -350,7 +440,8 @@ function renderState(state, options = {}) {
     if (selections.length > 0) {
       const usedVotes = getUsedVoteCount(playerName);
       const voteText = currentPlayerSelection ? ` · Votes ${usedVotes}/2` : "";
-      setStatus(`Patch ${state.version || "unbekannt"} · Runde läuft${voteText}`);
+      const resetText = getRequiredResetVotes(state) > 1 ? ` · Reset ${getResetVoteCount(state)}/${getRequiredResetVotes(state)}` : "";
+      setStatus(`Patch ${state.version || "unbekannt"} · Runde läuft${voteText}${resetText}`);
     } else {
       setStatus("Bereit");
     }
@@ -365,7 +456,8 @@ function renderState(state, options = {}) {
       <div class="locked-choice">
         <h3>Deine Wahl ist gespeichert</h3>
 
-        <div class="player-selection-card large">
+        <div class="player-selection-card large own-selection ${isLastPlayerReroll(currentPlayerSelection) ? "player-rerolled" : ""}">
+          ${renderBanButton(currentPlayerSelection)}
           <img
             src="${escapeHtml(currentPlayerSelection.champion.imageUrl || currentPlayerSelection.champion.splashUrl)}"
             alt="${escapeHtml(currentPlayerSelection.champion.name)}"
@@ -417,7 +509,8 @@ function renderState(state, options = {}) {
 
   const usedVotes = getUsedVoteCount(playerName);
   const voteText = currentPlayerSelection ? ` · Votes ${usedVotes}/2` : "";
-  setStatus(`Patch ${state.version || "unbekannt"} · Runde läuft${voteText}`);
+  const resetText = getRequiredResetVotes(state) > 1 ? ` · Reset ${getResetVoteCount(state)}/${getRequiredResetVotes(state)}` : "";
+  setStatus(`Patch ${state.version || "unbekannt"} · Runde läuft${voteText}${resetText}`);
 }
 
 async function loadState() {
@@ -571,9 +664,9 @@ async function voteItem(targetPlayerName, itemIndex) {
   }
 }
 
-async function resetGame() {
+async function rerollOwnBuild() {
   const confirmed = confirm(
-    "Möchtest du wirklich ein neues Spiel starten?\n\nAlle gewürfelten Champions, Items, Runen, Summoner Spells, Skill Orders und Votes werden gelöscht."
+    "Ist dein Champion gebannt?\n\nDann wird nur dein eigener Champion inklusive Build, Runen, Summoner Spells und Skill Order neu gewürfelt."
   );
 
   if (!confirmed) {
@@ -583,8 +676,67 @@ async function resetGame() {
   try {
     clearError();
 
+    const playerName = getPlayerName();
+
+    if (!playerName) {
+      throw new Error("Bitte gib einen Spielernamen ein.");
+    }
+
+    const response = await fetch("/api/bravery/reroll-player", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        playerName
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Dein Build konnte nicht neu gewürfelt werden");
+    }
+
+    lastRenderedSignature = "";
+    renderState(data, { force: true });
+  } catch (error) {
+    showError(error.message);
+  }
+}
+
+async function resetGame() {
+  const requiredVotes = getRequiredResetVotes(currentState);
+  const resetVotes = getResetVoteCount(currentState);
+  const message = requiredVotes > 1
+    ? `Neues Spiel anfragen?\n\nAb 3 Spielern werden 2 Stimmen benötigt. Aktuell: ${resetVotes}/${requiredVotes}.`
+    : "Möchtest du wirklich ein neues Spiel starten?\n\nAlle gewürfelten Champions, Items, Runen, Summoner Spells, Skill Orders und Votes werden gelöscht.";
+
+  const confirmed = confirm(message);
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    clearError();
+
+    const playerName = requiredVotes > 1
+      ? getPlayerName()
+      : (localStorage.getItem("braveryPlayerName") || "");
+
+    if (requiredVotes > 1 && !playerName) {
+      throw new Error("Bitte gib einen Spielernamen ein.");
+    }
+
     const response = await fetch("/api/bravery/reset", {
-      method: "POST"
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        playerName
+      })
     });
 
     const data = await response.json();
@@ -593,14 +745,16 @@ async function resetGame() {
       throw new Error(data.error || "Neues Spiel konnte nicht gestartet werden");
     }
 
-    localStorage.removeItem("braveryPlayerName");
+    if (!(data.selections || []).length && !Object.keys(data.rolls || {}).length) {
+      localStorage.removeItem("braveryPlayerName");
 
-    selectedRole = "";
-    document.getElementById("roleInput").value = "";
+      selectedRole = "";
+      document.getElementById("roleInput").value = "";
 
-    document.querySelectorAll(".role-button").forEach(button => {
-      button.classList.remove("active");
-    });
+      document.querySelectorAll(".role-button").forEach(button => {
+        button.classList.remove("active");
+      });
+    }
 
     lastRenderedSignature = "";
 

@@ -184,7 +184,9 @@ async function ensureBraveryStateFile() {
       rolls: {},
       selections: [],
       itemVotes: [],
+      resetVotes: [],
       lastItemReroll: null,
+      lastPlayerReroll: null,
       createdAt: null,
       updatedAt: null
     });
@@ -204,7 +206,9 @@ async function readBraveryState() {
       rolls: {},
       selections: [],
       itemVotes: [],
+      resetVotes: [],
       lastItemReroll: null,
+      lastPlayerReroll: null,
       createdAt: null,
       updatedAt: null
     };
@@ -572,6 +576,30 @@ async function getRandomChampions(count = 3) {
   };
 }
 
+async function getRandomChampionExcept(version, excludedChampionIds = []) {
+  const championData = await fetchDataDragonJson(
+    `https://ddragon.leagueoflegends.com/cdn/${version}/data/de_DE/champion.json`
+  );
+
+  const excluded = new Set((excludedChampionIds || []).map(id => String(id)));
+  const champions = Object.values(championData.data || {}).map(champion => ({
+    id: champion.id,
+    key: champion.key,
+    name: champion.name,
+    title: champion.title,
+    imageUrl: `https://ddragon.leagueoflegends.com/cdn/${version}/img/champion/${champion.image.full}`,
+    splashUrl: `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${champion.id}_0.jpg`
+  })).filter(champion => !excluded.has(String(champion.id)));
+
+  const champion = shuffleArray(champions)[0];
+
+  if (!champion) {
+    throw new Error("Kein gültiger Ersatz-Champion gefunden");
+  }
+
+  return champion;
+}
+
 function toPublicItem(item, itemType) {
   return {
     id: item.id,
@@ -934,8 +962,54 @@ function getRandomSummonerSpells(role, version) {
     .map(spell => toPublicSummonerSpell(spell, version));
 }
 
-function getRandomSkillOrder() {
-  return shuffleArray(["Q", "W", "E"]);
+async function getChampionBasicSpells(champion, version) {
+  const fallback = ["Q", "W", "E"].map(key => ({
+    id: `${champion?.id || "champion"}-${key.toLowerCase()}`,
+    key,
+    name: key,
+    imageUrl: null
+  }));
+
+  if (!champion?.id || !version) {
+    return fallback;
+  }
+
+  try {
+    const championData = await fetchDataDragonJson(
+      `https://ddragon.leagueoflegends.com/cdn/${version}/data/de_DE/champion/${encodeURIComponent(champion.id)}.json`
+    );
+
+    const championDetail = championData.data?.[champion.id];
+    const spells = Array.isArray(championDetail?.spells)
+      ? championDetail.spells.slice(0, 3)
+      : [];
+
+    if (spells.length !== 3) {
+      return fallback;
+    }
+
+    return spells.map((spell, index) => {
+      const key = ["Q", "W", "E"][index];
+      const imageName = spell.image?.full;
+
+      return {
+        id: spell.id || `${champion.id}-${key.toLowerCase()}`,
+        key,
+        name: spell.name || key,
+        imageUrl: imageName
+          ? `https://ddragon.leagueoflegends.com/cdn/${version}/img/spell/${imageName}`
+          : null
+      };
+    });
+  } catch (error) {
+    console.warn(`Konnte Skill-Icons für ${champion.id} nicht laden:`, error.message);
+    return fallback;
+  }
+}
+
+async function getRandomSkillOrder(champion, version) {
+  const spells = await getChampionBasicSpells(champion, version);
+  return shuffleArray(spells);
 }
 
 async function getRandomReplacementItem(version, currentItems, currentItem) {
@@ -993,6 +1067,40 @@ function getActiveItemVotes(state, targetPlayerKey, itemIndex, itemId) {
     Number(vote.itemIndex) === Number(itemIndex) &&
     String(vote.itemId) === String(itemId)
   );
+}
+
+function getKnownBraveryPlayerKeys(state) {
+  const keys = new Set();
+
+  Object.keys(state.rolls || {}).forEach(key => {
+    if (key) keys.add(normalizePlayerKey(key));
+  });
+
+  (state.selections || []).forEach(selection => {
+    const key = normalizePlayerKey(selection.playerName);
+    if (key) keys.add(key);
+  });
+
+  return [...keys];
+}
+
+function getRequiredResetVotes(state) {
+  return getKnownBraveryPlayerKeys(state).length >= 3 ? 2 : 1;
+}
+
+function createEmptyBraveryState() {
+  return {
+    version: null,
+    champions: [],
+    rolls: {},
+    selections: [],
+    itemVotes: [],
+    resetVotes: [],
+    lastItemReroll: null,
+    lastPlayerReroll: null,
+    createdAt: null,
+    updatedAt: null
+  };
 }
 
 function sendJson(res, statusCode, data) {
@@ -1162,6 +1270,7 @@ const server = http.createServer(async (req, res) => {
           [playerKey]: data.champions
         },
         selections: state.selections || [],
+        resetVotes: state.resetVotes || [],
         createdAt: state.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
@@ -1229,7 +1338,7 @@ const server = http.createServer(async (req, res) => {
       const itemBuild = await getRandomItems(state.version, role, 6);
       const runeBuild = await getRandomRunes(state.version);
       const summonerSpells = getRandomSummonerSpells(role, state.version);
-      const skillOrder = getRandomSkillOrder();
+      const skillOrder = await getRandomSkillOrder(champion, state.version);
 
       if (!itemBuild.starterItem) {
         throw new Error(`Kein Starter Item für Rolle ${role} generiert`);
@@ -1266,6 +1375,78 @@ const server = http.createServer(async (req, res) => {
         champions: [],
         rolls,
         selections,
+        resetVotes: [],
+        updatedAt: new Date().toISOString()
+      };
+
+      await writeBraveryState(newState);
+      sendJson(res, 200, newState);
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/bravery/reroll-player") {
+      const body = await readRequestBody(req);
+      const playerName = String(body.playerName || "").trim();
+
+      if (!playerName) {
+        sendJson(res, 400, { error: "Spielername fehlt" });
+        return;
+      }
+
+      const state = await readBraveryState();
+      const selections = state.selections || [];
+      const playerKey = normalizePlayerKey(playerName);
+      const selectionIndex = selections.findIndex(
+        selection => normalizePlayerKey(selection.playerName) === playerKey
+      );
+
+      if (selectionIndex < 0) {
+        sendJson(res, 404, { error: "Deine Auswahl wurde nicht gefunden." });
+        return;
+      }
+
+      const currentSelection = selections[selectionIndex];
+      const excludedChampionIds = selections
+        .filter((_, index) => index !== selectionIndex)
+        .map(selection => selection.champion?.id)
+        .filter(Boolean);
+
+      const champion = await getRandomChampionExcept(state.version, excludedChampionIds);
+      const itemBuild = await getRandomItems(state.version, currentSelection.role, 6);
+      const runeBuild = await getRandomRunes(state.version);
+      const summonerSpells = getRandomSummonerSpells(currentSelection.role, state.version);
+      const skillOrder = await getRandomSkillOrder(champion, state.version);
+
+      if (!itemBuild.starterItem || !Array.isArray(itemBuild.finalItems) || itemBuild.finalItems.length !== 6) {
+        throw new Error(`Ungültiger neuer Build für ${currentSelection.playerName}`);
+      }
+
+      const rerolledSelection = {
+        ...currentSelection,
+        champion,
+        starterItem: itemBuild.starterItem,
+        items: itemBuild.finalItems,
+        runes: runeBuild,
+        summonerSpells,
+        skillOrder,
+        rerolledAt: new Date().toISOString()
+      };
+
+      selections[selectionIndex] = rerolledSelection;
+
+      const newState = {
+        ...state,
+        selections,
+        itemVotes: (state.itemVotes || []).filter(vote => vote.targetPlayerKey !== playerKey),
+        resetVotes: [],
+        lastPlayerReroll: {
+          eventId: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          playerKey,
+          playerName: rerolledSelection.playerName,
+          championId: champion.id,
+          championName: champion.name,
+          at: new Date().toISOString()
+        },
         updatedAt: new Date().toISOString()
       };
 
@@ -1404,15 +1585,51 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "POST" && url.pathname === "/api/bravery/reset") {
+      const body = await readRequestBody(req);
+      const playerName = String(body.playerName || "").trim();
+      const state = await readBraveryState();
+      const requiredVotes = getRequiredResetVotes(state);
+
+      if (requiredVotes <= 1) {
+        const newState = createEmptyBraveryState();
+        await writeBraveryState(newState);
+        sendJson(res, 200, newState);
+        return;
+      }
+
+      if (!playerName) {
+        sendJson(res, 400, { error: "Spielername fehlt" });
+        return;
+      }
+
+      const playerKey = normalizePlayerKey(playerName);
+      const knownPlayerKeys = getKnownBraveryPlayerKeys(state);
+
+      if (!knownPlayerKeys.includes(playerKey)) {
+        sendJson(res, 400, { error: "Du musst in dieser Runde zuerst Teil der Lobby sein." });
+        return;
+      }
+
+      const resetVotes = state.resetVotes || [];
+      const nextResetVotes = resetVotes.some(vote => vote.voterKey === playerKey)
+        ? resetVotes
+        : [...resetVotes, {
+          voterKey: playerKey,
+          voterName: playerName,
+          votedAt: new Date().toISOString()
+        }];
+
+      if (nextResetVotes.length >= requiredVotes) {
+        const newState = createEmptyBraveryState();
+        await writeBraveryState(newState);
+        sendJson(res, 200, newState);
+        return;
+      }
+
       const newState = {
-        version: null,
-        champions: [],
-        rolls: {},
-        selections: [],
-        itemVotes: [],
-        lastItemReroll: null,
-        createdAt: null,
-        updatedAt: null
+        ...state,
+        resetVotes: nextResetVotes,
+        updatedAt: new Date().toISOString()
       };
 
       await writeBraveryState(newState);
