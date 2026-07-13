@@ -9,6 +9,27 @@ let currentState = {
 let selectedRole = "";
 let lastRenderedSignature = "";
 
+const ITEM_VOTES_PER_PLAYER = 3;
+
+function readSeenRerollEvents(storageKey) {
+  try {
+    return new Set(JSON.parse(sessionStorage.getItem(storageKey) || "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+const seenItemRerollEvents = readSeenRerollEvents("braverySeenItemRerolls");
+const seenPlayerRerollEvents = readSeenRerollEvents("braverySeenPlayerRerolls");
+
+function persistSeenRerollEvents(storageKey, eventSet) {
+  try {
+    sessionStorage.setItem(storageKey, JSON.stringify([...eventSet].slice(-50)));
+  } catch {
+    // Session Storage ist optional. Die Logik funktioniert auch nur im Speicher.
+  }
+}
+
 const roleLabels = {
   top: "Top",
   jungle: "Jungle",
@@ -94,7 +115,7 @@ function updateResetButton(state = currentState) {
 function isLastPlayerReroll(selection) {
   const event = currentState.lastPlayerReroll;
 
-  if (!event) return false;
+  if (!event?.eventId || seenPlayerRerollEvents.has(event.eventId)) return false;
 
   return event.playerKey === normalizePlayerName(selection.playerName);
 }
@@ -172,13 +193,25 @@ function hasVotedForItem(playerName, selection, item, itemIndex) {
 function isLastRerolledItem(selection, item, itemIndex) {
   const event = currentState.lastItemReroll;
 
-  if (!event) return false;
+  if (!event?.eventId || seenItemRerollEvents.has(event.eventId)) return false;
 
   return (
     event.targetPlayerKey === normalizePlayerName(selection.playerName) &&
     Number(event.itemIndex) === Number(itemIndex) &&
     String(event.newItemId) === String(item.id)
   );
+}
+
+function markRerollEventsSeen(state) {
+  if (state.lastItemReroll?.eventId) {
+    seenItemRerollEvents.add(state.lastItemReroll.eventId);
+    persistSeenRerollEvents("braverySeenItemRerolls", seenItemRerollEvents);
+  }
+
+  if (state.lastPlayerReroll?.eventId) {
+    seenPlayerRerollEvents.add(state.lastPlayerReroll.eventId);
+    persistSeenRerollEvents("braverySeenPlayerRerolls", seenPlayerRerollEvents);
+  }
 }
 
 function renderItemList(selection, extraClass = "", showNames = true) {
@@ -191,6 +224,7 @@ function renderItemList(selection, extraClass = "", showNames = true) {
   const currentPlayerName = localStorage.getItem("braveryPlayerName") || "";
   const usedVotes = getUsedVoteCount(currentPlayerName);
   const isOwnSelection = normalizePlayerName(selection.playerName) === normalizePlayerName(currentPlayerName);
+  const canSelfSwap = currentPlayerName && isOwnSelection && usedVotes >= ITEM_VOTES_PER_PLAYER;
 
   return `
     <div class="item-list ${escapeHtml(extraClass)}">
@@ -198,7 +232,7 @@ function renderItemList(selection, extraClass = "", showNames = true) {
         const voteCount = getItemVoteCount(selection, item, itemIndex);
         const voteClass = voteCount >= 2 ? "item-vote-hot" : voteCount === 1 ? "item-vote-warm" : "";
         const hasAlreadyVoted = hasVotedForItem(currentPlayerName, selection, item, itemIndex);
-        const canVote = currentPlayerName && !isOwnSelection && usedVotes < 2 && !hasAlreadyVoted;
+        const canVote = currentPlayerName && !isOwnSelection && usedVotes < ITEM_VOTES_PER_PLAYER && !hasAlreadyVoted;
         const rerollClass = isLastRerolledItem(selection, item, itemIndex) ? "item-rerolled" : "";
         const titleParts = [item.name];
 
@@ -208,6 +242,10 @@ function renderItemList(selection, extraClass = "", showNames = true) {
 
         if (hasAlreadyVoted) {
           titleParts.push("von dir gevoted");
+        }
+
+        if (canSelfSwap) {
+          titleParts.push("Eigenes Item tauschbar");
         }
 
         return `
@@ -223,7 +261,15 @@ function renderItemList(selection, extraClass = "", showNames = true) {
                 aria-label="Gegen ${escapeHtml(item.name)} voten"
               >Vote</button>
             ` : ""}
-            ${!canVote && voteCount > 0 ? `<span class="item-vote-dot" aria-label="${voteCount} Votes"></span>` : ""}
+            ${canSelfSwap ? `
+              <button
+                type="button"
+                class="item-self-reroll-button"
+                data-self-reroll-index="${itemIndex}"
+                aria-label="${escapeHtml(item.name)} neu würfeln"
+              >Ändern</button>
+            ` : ""}
+            ${!canVote && !canSelfSwap && voteCount > 0 ? `<span class="item-vote-dot" aria-label="${voteCount} Votes"></span>` : ""}
           </div>
         `;
       }).join("")}
@@ -357,6 +403,12 @@ function attachVoteHandlers() {
       rerollOwnBuild();
     });
   });
+
+  document.querySelectorAll("[data-self-reroll-index]").forEach(button => {
+    button.addEventListener("click", () => {
+      rerollOwnItem(Number(button.dataset.selfRerollIndex));
+    });
+  });
 }
 
 function renderPlayers(selections) {
@@ -439,13 +491,14 @@ function renderState(state, options = {}) {
 
     if (selections.length > 0) {
       const usedVotes = getUsedVoteCount(playerName);
-      const voteText = currentPlayerSelection ? ` · Votes ${usedVotes}/2` : "";
+      const voteText = currentPlayerSelection ? ` · Votes ${usedVotes}/${ITEM_VOTES_PER_PLAYER}` : "";
       const resetText = getRequiredResetVotes(state) > 1 ? ` · Reset ${getResetVoteCount(state)}/${getRequiredResetVotes(state)}` : "";
       setStatus(`Patch ${state.version || "unbekannt"} · Runde läuft${voteText}${resetText}`);
     } else {
       setStatus("Bereit");
     }
 
+    markRerollEventsSeen(state);
     return;
   }
 
@@ -508,9 +561,10 @@ function renderState(state, options = {}) {
   renderPlayers(selections);
 
   const usedVotes = getUsedVoteCount(playerName);
-  const voteText = currentPlayerSelection ? ` · Votes ${usedVotes}/2` : "";
+  const voteText = currentPlayerSelection ? ` · Votes ${usedVotes}/${ITEM_VOTES_PER_PLAYER}` : "";
   const resetText = getRequiredResetVotes(state) > 1 ? ` · Reset ${getResetVoteCount(state)}/${getRequiredResetVotes(state)}` : "";
   setStatus(`Patch ${state.version || "unbekannt"} · Runde läuft${voteText}${resetText}`);
+  markRerollEventsSeen(state);
 }
 
 async function loadState() {
@@ -696,6 +750,48 @@ async function rerollOwnBuild() {
 
     if (!response.ok) {
       throw new Error(data.error || "Dein Build konnte nicht neu gewürfelt werden");
+    }
+
+    lastRenderedSignature = "";
+    renderState(data, { force: true });
+  } catch (error) {
+    showError(error.message);
+  }
+}
+
+async function rerollOwnItem(itemIndex) {
+  const confirmed = confirm(
+    "Dieses eigene Item neu würfeln?\n\nDer Button ist nur verfügbar, nachdem du deine 3 Votes benutzt hast."
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    clearError();
+
+    const playerName = getPlayerName();
+
+    if (!playerName) {
+      throw new Error("Bitte gib einen Spielernamen ein.");
+    }
+
+    const response = await fetch("/api/bravery/item-swap", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        playerName,
+        itemIndex
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Item konnte nicht neu gewürfelt werden");
     }
 
     lastRenderedSignature = "";

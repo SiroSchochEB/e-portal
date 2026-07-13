@@ -145,6 +145,13 @@ const SUMMONER_SPELLS = [
   { id: "smite", name: "Smite", image: "SummonerSmite.png" }
 ];
 
+const ITEM_VOTES_PER_PLAYER = 3;
+const ITEM_REROLL_VOTE_THRESHOLD = 3;
+
+function getFinalItemCountForRole(role) {
+  return role === "adc" ? 7 : 6;
+}
+
 async function ensureAccountsFile() {
   await fs.mkdir(path.dirname(ACCOUNTS_FILE), { recursive: true });
 
@@ -713,6 +720,44 @@ function getStarterItemsForRole(allItems, role) {
   );
 }
 
+function normalizeItemNameKey(item) {
+  return String(item?.name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[’'`]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function hasItemIdentity(items, item) {
+  const itemId = String(item?.id || "");
+  const itemNameKey = normalizeItemNameKey(item);
+
+  return (items || []).some(existingItem =>
+    String(existingItem?.id || "") === itemId ||
+    normalizeItemNameKey(existingItem) === itemNameKey
+  );
+}
+
+function dedupeItemsByIdentity(items) {
+  const usedIds = new Set();
+  const usedNames = new Set();
+  const result = [];
+
+  for (const item of items || []) {
+    const itemId = String(item?.id || "");
+    const itemNameKey = normalizeItemNameKey(item);
+
+    if (!itemId || !itemNameKey) continue;
+    if (usedIds.has(itemId) || usedNames.has(itemNameKey)) continue;
+
+    usedIds.add(itemId);
+    usedNames.add(itemNameKey);
+    result.push(item);
+  }
+
+  return result;
+}
+
 async function getRandomItems(version, role, count = 6) {
   const itemData = await fetchDataDragonJson(
     `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/item.json`
@@ -748,7 +793,9 @@ async function getRandomItems(version, role, count = 6) {
     role === "support" ? "support-final" : "starter"
   );
 
-  const validFinalItems = allItems.filter(isAllowedFinalBuildItem);
+  const validFinalItems = dedupeItemsByIdentity(
+    allItems.filter(isAllowedFinalBuildItem)
+  );
 
   console.log("Bravery Item Pools:", {
     role,
@@ -777,9 +824,7 @@ async function getRandomItems(version, role, count = 6) {
   for (const item of nonBoots) {
     if (finalItems.length >= count) break;
 
-    const alreadyUsed = finalItems.some(selectedItem => selectedItem.id === item.id);
-
-    if (!alreadyUsed) {
+    if (!hasItemIdentity(finalItems, item)) {
       finalItems.push(toPublicItem(item, "final"));
     }
   }
@@ -1037,11 +1082,21 @@ async function getRandomReplacementItem(version, currentItems, currentItem) {
   }));
 
   const currentIds = new Set((currentItems || []).map(item => String(item.id)));
-  currentIds.delete(String(currentItem?.id || ""));
+  const currentNames = new Set((currentItems || []).map(normalizeItemNameKey));
+  const currentItemId = String(currentItem?.id || "");
+  const currentItemName = normalizeItemNameKey(currentItem);
 
-  const validItems = allItems
-    .filter(isAllowedFinalBuildItem)
-    .filter(item => !currentIds.has(String(item.id)));
+  currentIds.delete(currentItemId);
+  currentNames.delete(currentItemName);
+
+  const validItems = dedupeItemsByIdentity(
+    allItems.filter(isAllowedFinalBuildItem)
+  ).filter(item =>
+    String(item.id) !== currentItemId &&
+    normalizeItemNameKey(item) !== currentItemName &&
+    !currentIds.has(String(item.id)) &&
+    !currentNames.has(normalizeItemNameKey(item))
+  );
 
   const sameTypeItems = currentItem?.itemType === "boots"
     ? validItems.filter(isBootItem)
@@ -1335,7 +1390,8 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const itemBuild = await getRandomItems(state.version, role, 6);
+      const finalItemCount = getFinalItemCountForRole(role);
+      const itemBuild = await getRandomItems(state.version, role, finalItemCount);
       const runeBuild = await getRandomRunes(state.version);
       const summonerSpells = getRandomSummonerSpells(role, state.version);
       const skillOrder = await getRandomSkillOrder(champion, state.version);
@@ -1344,9 +1400,9 @@ const server = http.createServer(async (req, res) => {
         throw new Error(`Kein Starter Item für Rolle ${role} generiert`);
       }
 
-      if (!Array.isArray(itemBuild.finalItems) || itemBuild.finalItems.length !== 6) {
+      if (!Array.isArray(itemBuild.finalItems) || itemBuild.finalItems.length !== finalItemCount) {
         throw new Error(
-          `Ungültiger Item Build für Rolle ${role}: erwartet 6 Full Items, erhalten ${itemBuild.finalItems?.length || 0}`
+          `Ungültiger Item Build für Rolle ${role}: erwartet ${finalItemCount} Full Items, erhalten ${itemBuild.finalItems?.length || 0}`
         );
       }
 
@@ -1412,12 +1468,13 @@ const server = http.createServer(async (req, res) => {
         .filter(Boolean);
 
       const champion = await getRandomChampionExcept(state.version, excludedChampionIds);
-      const itemBuild = await getRandomItems(state.version, currentSelection.role, 6);
+      const finalItemCount = getFinalItemCountForRole(currentSelection.role);
+      const itemBuild = await getRandomItems(state.version, currentSelection.role, finalItemCount);
       const runeBuild = await getRandomRunes(state.version);
       const summonerSpells = getRandomSummonerSpells(currentSelection.role, state.version);
       const skillOrder = await getRandomSkillOrder(champion, state.version);
 
-      if (!itemBuild.starterItem || !Array.isArray(itemBuild.finalItems) || itemBuild.finalItems.length !== 6) {
+      if (!itemBuild.starterItem || !Array.isArray(itemBuild.finalItems) || itemBuild.finalItems.length !== finalItemCount) {
         throw new Error(`Ungültiger neuer Build für ${currentSelection.playerName}`);
       }
 
@@ -1510,8 +1567,8 @@ const server = http.createServer(async (req, res) => {
       const itemVotes = state.itemVotes || [];
       const voterVotes = itemVotes.filter(vote => vote.voterKey === voterKey);
 
-      if (voterVotes.length >= 2) {
-        sendJson(res, 400, { error: "Du hast deine 2 Votes für diese Runde bereits benutzt." });
+      if (voterVotes.length >= ITEM_VOTES_PER_PLAYER) {
+        sendJson(res, 400, { error: `Du hast deine ${ITEM_VOTES_PER_PLAYER} Votes für diese Runde bereits benutzt.` });
         return;
       }
 
@@ -1548,7 +1605,7 @@ const server = http.createServer(async (req, res) => {
 
       let lastItemReroll = state.lastItemReroll || null;
 
-      if (activeVotes.length >= 3) {
+      if (activeVotes.length >= ITEM_REROLL_VOTE_THRESHOLD) {
         const replacementItem = await getRandomReplacementItem(
           state.version,
           targetItems,
@@ -1575,6 +1632,83 @@ const server = http.createServer(async (req, res) => {
         ...state,
         selections,
         itemVotes: nextVotes,
+        lastItemReroll,
+        updatedAt: new Date().toISOString()
+      };
+
+      await writeBraveryState(newState);
+      sendJson(res, 200, newState);
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/bravery/item-swap") {
+      const body = await readRequestBody(req);
+
+      const playerName = String(body.playerName || "").trim();
+      const itemIndex = Number(body.itemIndex);
+
+      if (!playerName) {
+        sendJson(res, 400, { error: "Spielername fehlt" });
+        return;
+      }
+
+      if (!Number.isInteger(itemIndex)) {
+        sendJson(res, 400, { error: "Ungültiges Item" });
+        return;
+      }
+
+      const state = await readBraveryState();
+      const selections = state.selections || [];
+      const playerKey = normalizePlayerKey(playerName);
+      const selection = selections.find(
+        currentSelection => normalizePlayerKey(currentSelection.playerName) === playerKey
+      );
+
+      if (!selection) {
+        sendJson(res, 400, { error: "Du musst in dieser Runde zuerst deine Auswahl speichern." });
+        return;
+      }
+
+      const usedVotes = (state.itemVotes || []).filter(vote => vote.voterKey === playerKey).length;
+
+      if (usedVotes < ITEM_VOTES_PER_PLAYER) {
+        sendJson(res, 400, { error: `Du musst zuerst deine ${ITEM_VOTES_PER_PLAYER} Item-Votes benutzen.` });
+        return;
+      }
+
+      const items = selection.items || [];
+      const currentItem = items[itemIndex];
+
+      if (!currentItem) {
+        sendJson(res, 400, { error: "Item wurde nicht gefunden." });
+        return;
+      }
+
+      const replacementItem = await getRandomReplacementItem(
+        state.version,
+        items,
+        currentItem
+      );
+
+      items[itemIndex] = replacementItem;
+      selection.items = items;
+
+      const lastItemReroll = {
+        eventId: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        targetPlayerKey: playerKey,
+        targetPlayerName: selection.playerName,
+        itemIndex,
+        oldItemId: currentItem.id,
+        oldItemName: currentItem.name,
+        newItemId: replacementItem.id,
+        newItemName: replacementItem.name,
+        source: "self-swap",
+        at: new Date().toISOString()
+      };
+
+      const newState = {
+        ...state,
+        selections,
         lastItemReroll,
         updatedAt: new Date().toISOString()
       };
