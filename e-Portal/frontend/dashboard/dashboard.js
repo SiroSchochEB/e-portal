@@ -31,7 +31,8 @@ function getQueueData(account, queue) {
       lp: account.flexLp,
       wins: account.flexWins,
       losses: account.flexLosses,
-      score: account.flexScore
+      score: account.flexScore,
+      dailyChange: account.flexDailyChange || 0
     };
   }
 
@@ -41,8 +42,48 @@ function getQueueData(account, queue) {
     lp: account.lp,
     wins: account.wins,
     losses: account.losses,
-    score: account.score
+    score: account.score,
+    dailyChange: account.dailyChange || 0
   };
+}
+
+function getDeepLolRegion(region) {
+  const regionMap = {
+    euw1: "euw",
+    eun1: "eune",
+    na1: "na",
+    kr: "kr",
+    jp1: "jp",
+    tr1: "tr",
+    br1: "br",
+    la1: "lan",
+    la2: "las"
+  };
+
+  return regionMap[String(region || "").toLowerCase()] || String(region || "").toLowerCase();
+}
+
+function getDeepLolUrl(account) {
+  const region = getDeepLolRegion(account.region);
+  const summoner = `${account.gameName || ""}-${account.tagLine || ""}`;
+
+  return `https://www.deeplol.gg/summoner/${encodeURIComponent(region)}/${encodeURIComponent(summoner)}`;
+}
+
+function renderDailyChange(change) {
+  const value = Number(change) || 0;
+  const changeClass = value > 0
+    ? "daily-change positive"
+    : value < 0
+      ? "daily-change negative"
+      : "daily-change neutral";
+  const label = value > 0
+    ? `+${value} LP`
+    : value < 0
+      ? `${value} LP`
+      : "±0 LP";
+
+  return `<span class="${changeClass}">${escapeHtml(label)}</span>`;
 }
 
 function renderStats(accounts) {
@@ -96,8 +137,8 @@ function renderTable() {
       ? "UNRANKED"
       : `${queueData.tier} ${queueData.rank}`;
 
-    const lpPercent = Math.max(0, Math.min(100, queueData.lp || 0));
     const placeClass = index === 0 ? "place first" : "place";
+    const deepLolUrl = getDeepLolUrl(account);
 
     return `
       <tr>
@@ -106,10 +147,10 @@ function renderTable() {
         </td>
 
         <td>
-          <div class="account">
+          <a class="account account-link" href="${escapeHtml(deepLolUrl)}" target="_blank" rel="noopener noreferrer" title="Auf Deeplol öffnen">
             <strong>${escapeHtml(account.label)}</strong>
             <span>${escapeHtml(account.riotId)} · ${escapeHtml(account.region)}</span>
-          </div>
+          </a>
         </td>
 
         <td>
@@ -131,11 +172,7 @@ function renderTable() {
 
         <td>${getWinrate(queueData.wins || 0, queueData.losses || 0)}</td>
 
-        <td>
-          <div class="progress">
-            <div class="progress-bar" style="width: ${lpPercent}%;"></div>
-          </div>
-        </td>
+        <td>${renderDailyChange(queueData.dailyChange)}</td>
 
         <td>${queueData.score || 0}</td>
 

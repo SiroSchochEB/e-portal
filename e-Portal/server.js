@@ -4,6 +4,7 @@ const path = require("path");
 
 const PORT = process.env.PORT || 8080;
 const RIOT_API_KEY = process.env.RIOT_API_KEY;
+const DASHBOARD_TIME_ZONE = process.env.DASHBOARD_TIME_ZONE || "Europe/Zurich";
 
 const ACCOUNTS_FILE =
   process.env.ACCOUNTS_FILE || path.join(__dirname, "data", "accounts.json");
@@ -177,6 +178,46 @@ async function readAccounts() {
 async function writeAccounts(accounts) {
   await ensureAccountsFile();
   await fs.writeFile(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2), "utf8");
+}
+
+function getDashboardDateKey() {
+  try {
+    const parts = new Intl.DateTimeFormat("en", {
+      timeZone: DASHBOARD_TIME_ZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).formatToParts(new Date());
+    const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+
+    return `${values.year}-${values.month}-${values.day}`;
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
+function getDailyRankChange(account, queue, currentScore, todayKey) {
+  const queueKey = queue === "flex" ? "flexScore" : "soloScore";
+  const safeScore = Number(currentScore) || 0;
+  const snapshot = account.dailyRankSnapshot;
+
+  if (!snapshot || snapshot.date !== todayKey || typeof snapshot[queueKey] !== "number") {
+    account.dailyRankSnapshot = {
+      ...(snapshot && snapshot.date === todayKey ? snapshot : {}),
+      date: todayKey,
+      [queueKey]: safeScore
+    };
+
+    return {
+      change: 0,
+      updated: true
+    };
+  }
+
+  return {
+    change: safeScore - snapshot[queueKey],
+    updated: false
+  };
 }
 
 async function ensureBraveryStateFile() {
@@ -380,10 +421,16 @@ async function getAccountRankData(account) {
 async function getAccountsWithRank() {
   const accounts = await readAccounts();
   const result = [];
+  const todayKey = getDashboardDateKey();
+  let accountsChanged = false;
 
   for (const account of accounts) {
     try {
       const data = await getAccountRankData(account);
+      const soloDaily = getDailyRankChange(account, "solo", data.soloq.score, todayKey);
+      const flexDaily = getDailyRankChange(account, "flex", data.flex.score, todayKey);
+
+      accountsChanged = accountsChanged || soloDaily.updated || flexDaily.updated;
 
       result.push({
         label: data.label,
@@ -398,6 +445,7 @@ async function getAccountsWithRank() {
         wins: data.soloq.wins,
         losses: data.soloq.losses,
         score: data.soloq.score,
+        dailyChange: soloDaily.change,
 
         flexTier: data.flex.tier,
         flexRank: data.flex.rank,
@@ -405,6 +453,7 @@ async function getAccountsWithRank() {
         flexWins: data.flex.wins,
         flexLosses: data.flex.losses,
         flexScore: data.flex.score,
+        flexDailyChange: flexDaily.change,
 
         error: null
       });
@@ -422,6 +471,7 @@ async function getAccountsWithRank() {
         wins: 0,
         losses: 0,
         score: -1,
+        dailyChange: 0,
 
         flexTier: "ERROR",
         flexRank: "",
@@ -429,10 +479,15 @@ async function getAccountsWithRank() {
         flexWins: 0,
         flexLosses: 0,
         flexScore: -1,
+        flexDailyChange: 0,
 
         error: error.message
       });
     }
+  }
+
+  if (accountsChanged) {
+    await writeAccounts(accounts);
   }
 
   result.sort((a, b) => b.score - a.score);

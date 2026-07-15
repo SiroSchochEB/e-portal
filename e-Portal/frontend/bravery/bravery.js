@@ -267,7 +267,7 @@ function renderItemList(selection, extraClass = "", showNames = true) {
                 class="item-self-reroll-button"
                 data-self-reroll-index="${itemIndex}"
                 aria-label="${escapeHtml(item.name)} neu würfeln"
-              >Ändern</button>
+              >Swap</button>
             ` : ""}
             ${!canVote && !canSelfSwap && voteCount > 0 ? `<span class="item-vote-dot" aria-label="${voteCount} Votes"></span>` : ""}
           </div>
@@ -601,7 +601,7 @@ async function rollChampions() {
     const playerName = getPlayerName();
 
     if (!playerName) {
-      throw new Error("Bitte gib einen Spielernamen ein.");
+      throw new Error("Din Name du Somali");
     }
 
     const response = await fetch("/api/bravery/roll", {
@@ -642,13 +642,13 @@ async function selectChampion(championId) {
     const playerName = getPlayerName();
 
     if (!playerName) {
-      throw new Error("Bitte gib einen Spielernamen ein");
+      throw new Error("Bitte gib einen Somalinamen ein");
     }
 
     const role = document.getElementById("roleInput").value;
 
     if (!role) {
-      throw new Error("Bitte wähle zuerst eine Rolle.");
+      throw new Error("Wähl e rolle du Somali");
     }
 
     const existingSelection = getCurrentPlayerSelection(currentState.selections || []);
