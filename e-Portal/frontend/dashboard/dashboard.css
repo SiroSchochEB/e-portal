@@ -233,18 +233,61 @@ tr:last-child td {
 }
 
 .place {
+  position: relative;
   width: 36px;
   height: 36px;
   display: grid;
   place-items: center;
   border-radius: 50%;
   background: var(--card-2);
+  border: 2px solid transparent;
   font-weight: 800;
 }
 
 .place.first {
   background: linear-gradient(135deg, #facc15, #b45309);
   color: #111827;
+}
+
+.place.in-game {
+  border-color: rgba(239, 68, 68, 0.95);
+  box-shadow:
+    0 0 0 3px rgba(239, 68, 68, 0.15),
+    0 0 18px rgba(239, 68, 68, 0.35);
+}
+
+.place.in-game::after {
+  content: "";
+  position: absolute;
+  right: -1px;
+  top: -1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: 2px solid var(--card);
+}
+
+.place.in-game::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: inherit;
+  border: 1px solid rgba(239, 68, 68, 0.36);
+  animation: ingamePulse 1.8s ease-in-out infinite;
+}
+
+@keyframes ingamePulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.96);
+  }
+
+  50% {
+    opacity: 0.9;
+    transform: scale(1.08);
+  }
 }
 
 .account {

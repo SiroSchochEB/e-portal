@@ -346,6 +346,74 @@ async function riotFetch(url) {
   }
 }
 
+
+async function getAccountInGameStatus(region, puuid) {
+  if (!RIOT_API_KEY || !region || !puuid) {
+    return {
+      inGame: false,
+      gameMode: null,
+      gameType: null,
+      gameStartTime: null,
+      error: null
+    };
+  }
+
+  const url = `https://${region}.api.riotgames.com/lol/spectator/v5/active-games/by-summoner/${encodeURIComponent(puuid)}`;
+  console.log("Riot Request:", url);
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "X-Riot-Token": RIOT_API_KEY
+      }
+    });
+
+    const text = await response.text();
+
+    if (response.status === 404) {
+      return {
+        inGame: false,
+        gameMode: null,
+        gameType: null,
+        gameStartTime: null,
+        error: null
+      };
+    }
+
+    if (!response.ok) {
+      console.warn("Spectator API Fehler:", response.status, text);
+
+      return {
+        inGame: false,
+        gameMode: null,
+        gameType: null,
+        gameStartTime: null,
+        error: `Spectator API Fehler ${response.status}`
+      };
+    }
+
+    const activeGame = text ? JSON.parse(text) : null;
+
+    return {
+      inGame: Boolean(activeGame),
+      gameMode: activeGame?.gameMode || null,
+      gameType: activeGame?.gameType || null,
+      gameStartTime: activeGame?.gameStartTime || null,
+      error: null
+    };
+  } catch (error) {
+    console.warn("Spectator API konnte nicht gelesen werden:", error.message);
+
+    return {
+      inGame: false,
+      gameMode: null,
+      gameType: null,
+      gameStartTime: null,
+      error: error.message
+    };
+  }
+}
+
 async function getAccountRankData(account) {
   const regional = regionalRoute[account.region];
 
@@ -379,6 +447,7 @@ async function getAccountRankData(account) {
     region: account.region,
     gameName: account.gameName,
     tagLine: account.tagLine,
+    puuid: riotAccount.puuid,
 
     soloq: soloq
       ? {
@@ -427,6 +496,7 @@ async function getAccountsWithRank() {
   for (const account of accounts) {
     try {
       const data = await getAccountRankData(account);
+      const activeGame = await getAccountInGameStatus(data.region, data.puuid);
       const soloDaily = getDailyRankChange(account, "solo", data.soloq.score, todayKey);
       const flexDaily = getDailyRankChange(account, "flex", data.flex.score, todayKey);
 
@@ -438,6 +508,11 @@ async function getAccountsWithRank() {
         region: data.region,
         gameName: data.gameName,
         tagLine: data.tagLine,
+        inGame: activeGame.inGame === true,
+        gameMode: activeGame.gameMode,
+        gameType: activeGame.gameType,
+        gameStartTime: activeGame.gameStartTime,
+        inGameError: activeGame.error,
 
         tier: data.soloq.tier,
         rank: data.soloq.rank,
@@ -464,6 +539,11 @@ async function getAccountsWithRank() {
         region: account.region,
         gameName: account.gameName,
         tagLine: account.tagLine,
+        inGame: false,
+        gameMode: null,
+        gameType: null,
+        gameStartTime: null,
+        inGameError: null,
 
         tier: "ERROR",
         rank: "",

@@ -137,13 +137,18 @@ function renderTable() {
       ? "UNRANKED"
       : `${queueData.tier} ${queueData.rank}`;
 
-    const placeClass = index === 0 ? "place first" : "place";
+    const placeClass = ["place", index === 0 ? "first" : "", account.inGame ? "in-game" : ""]
+      .filter(Boolean)
+      .join(" ");
+    const placeTitle = account.inGame
+      ? `Aktuell ingame${account.gameMode ? ` · ${account.gameMode}` : ""}`
+      : "Nicht ingame";
     const deepLolUrl = getDeepLolUrl(account);
 
     return `
       <tr>
         <td>
-          <div class="${placeClass}">${index + 1}</div>
+          <div class="${placeClass}" title="${escapeHtml(placeTitle)}">${index + 1}</div>
         </td>
 
         <td>
