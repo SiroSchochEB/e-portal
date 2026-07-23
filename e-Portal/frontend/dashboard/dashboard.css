@@ -34,14 +34,14 @@ body {
 }
 
 .page {
-  width: min(1520px, calc(100% - 48px));
+  width: min(1440px, calc(100% - 48px));
   margin: 0 auto;
   padding: 40px 0;
 }
 
 @media (min-width: 1600px) {
   .page {
-    width: min(1640px, calc(100% - 64px));
+    width: min(1500px, calc(100% - 64px));
   }
 }
 
@@ -207,7 +207,7 @@ button:hover {
   overflow-x: visible;
 }
 
-@media (max-width: 1320px) {
+@media (max-width: 1260px) {
   .table-wrap {
     overflow-x: auto;
   }
@@ -216,58 +216,64 @@ button:hover {
 table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
   min-width: 0;
 }
 
-@media (max-width: 1320px) {
+@media (max-width: 1260px) {
   table {
-    min-width: 1280px;
+    min-width: 1180px;
   }
 }
 
 th:nth-child(1),
 td:nth-child(1) {
-  width: 64px;
+  width: 58px;
 }
 
 th:nth-child(2),
 td:nth-child(2) {
-  width: 180px;
+  width: 185px;
 }
 
 th:nth-child(3),
 td:nth-child(3) {
-  width: 150px;
+  width: 145px;
 }
 
 th:nth-child(4),
 td:nth-child(4) {
-  width: 84px;
+  width: 76px;
+}
+
+th:nth-child(5),
+td:nth-child(5) {
+  width: 126px;
+}
+
+th:nth-child(6),
+td:nth-child(6) {
+  width: 86px;
 }
 
 th:nth-child(7),
 td:nth-child(7) {
-  width: 108px;
+  width: 104px;
 }
 
 th:nth-child(8),
 td:nth-child(8) {
-  width: 154px;
+  width: 146px;
 }
 
 th:nth-child(9),
 td:nth-child(9) {
-  width: 220px;
+  width: 210px;
 }
 
 th:nth-child(10),
 td:nth-child(10) {
-  width: 86px;
-}
-
-th:nth-child(11),
-td:nth-child(11) {
-  width: 116px;
+  width: 110px;
 }
 
 th {
@@ -276,13 +282,13 @@ th {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  padding: 14px 16px;
+  padding: 13px 12px;
   border-bottom: 1px solid var(--border);
   background: rgba(11, 16, 32, 0.8);
 }
 
 td {
-  padding: 16px 16px;
+  padding: 15px 12px;
   border-bottom: 1px solid rgba(55, 65, 81, 0.7);
   vertical-align: middle;
 }
@@ -394,7 +400,7 @@ tr:last-child td {
 .rank-badge {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: 8px 10px;
   border-radius: 999px;
   font-weight: 800;
@@ -459,7 +465,7 @@ tr:last-child td {
 
 .wl {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
   color: var(--muted);
 }
@@ -504,7 +510,7 @@ tr:last-child td {
 }
 
 .sparkline {
-  width: 124px;
+  width: 116px;
   height: 34px;
   display: block;
   overflow: visible;
@@ -543,7 +549,7 @@ tr:last-child td {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-width: 190px;
+  min-width: 180px;
 }
 
 .champ-match {
@@ -632,7 +638,7 @@ tr:last-child td {
 
 .error {
   margin: 20px;
-  padding: 14px 16px;
+  padding: 13px 12px;
   background: rgba(239, 68, 68, 0.12);
   border: 1px solid rgba(239, 68, 68, 0.45);
   color: #fecaca;

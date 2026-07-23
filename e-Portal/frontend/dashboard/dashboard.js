@@ -323,8 +323,6 @@ function renderTable() {
 
         <td>${renderRecentMatches(queueData.recentMatches)}</td>
 
-        <td>${queueData.score || 0}</td>
-
         <td>
           <button
             type="button"
