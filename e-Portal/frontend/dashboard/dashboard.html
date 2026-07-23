@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>LoL Rank Dashboard</title>
 
-  <link rel="stylesheet" href="/dashboard/dashboard.css?v=6" />
+  <link rel="stylesheet" href="/dashboard/dashboard.css?v=7" />
 </head>
 
 <body>
@@ -69,7 +69,7 @@
       </form>
     </section>
 
-    <section class="panel">
+    <section class="panel" id="accountsPanel" aria-busy="false">
       <div class="panel-header">
         <div class="panel-title">Account Übersicht</div>
 
@@ -79,9 +79,11 @@
             <option value="flex">Flex</option>
           </select>
 
-          <button type="button" id="refreshButton">Aktualisieren</button>
+          <button type="button" id="refreshButton" class="refresh-button">Aktualisieren</button>
         </div>
       </div>
+
+      <div class="panel-loading-bar" aria-hidden="true"></div>
 
       <div id="error"></div>
 
@@ -112,6 +114,6 @@
     </section>
   </main>
 
-  <script src="/dashboard/dashboard.js?v=6" defer></script>
+  <script src="/dashboard/dashboard.js?v=7" defer></script>
 </body>
 </html>

@@ -1,4 +1,28 @@
 let currentAccounts = [];
+let accountLoadInProgress = false;
+
+function setAccountPanelLoading(isLoading, label = "Aktualisiere...") {
+  const panel = document.getElementById("accountsPanel");
+  const refreshButton = document.getElementById("refreshButton");
+
+  if (panel) {
+    panel.classList.toggle("is-loading", isLoading);
+    panel.setAttribute("aria-busy", isLoading ? "true" : "false");
+  }
+
+  if (!refreshButton) {
+    return;
+  }
+
+  refreshButton.disabled = isLoading;
+  refreshButton.classList.toggle("is-loading", isLoading);
+
+  if (isLoading) {
+    refreshButton.innerHTML = `<span class="button-spinner" aria-hidden="true"></span><span>${escapeHtml(label)}</span>`;
+  } else {
+    refreshButton.textContent = "Aktualisieren";
+  }
+}
 
 function escapeHtml(value) {
   return String(value)
@@ -353,15 +377,24 @@ function renderTable() {
 }
 
 async function loadAccounts(forceRefresh = false) {
+  if (accountLoadInProgress) {
+    return;
+  }
+
+  accountLoadInProgress = true;
+
   const status = document.getElementById("status");
   const errorBox = document.getElementById("error");
   const table = document.getElementById("table");
+  const empty = document.getElementById("empty");
   const queue = document.getElementById("queueSelect").value;
   const params = new URLSearchParams({ queue });
 
   if (forceRefresh) {
     params.set("refresh", "1");
   }
+
+  setAccountPanelLoading(true, forceRefresh ? "Aktualisiere..." : "Lade...");
 
   try {
     errorBox.innerHTML = "";
@@ -379,9 +412,16 @@ async function loadAccounts(forceRefresh = false) {
 
     status.textContent = "Letztes Update: " + new Date().toLocaleTimeString();
   } catch (error) {
-    table.style.display = "none";
     status.textContent = "Fehler beim Laden";
     errorBox.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
+
+    if (currentAccounts.length === 0) {
+      table.style.display = "none";
+      empty.style.display = "block";
+    }
+  } finally {
+    accountLoadInProgress = false;
+    setAccountPanelLoading(false);
   }
 }
 

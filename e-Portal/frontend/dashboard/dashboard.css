@@ -177,9 +177,67 @@ button:hover {
   filter: brightness(1.08);
 }
 
+button:disabled {
+  cursor: not-allowed;
+  filter: none;
+  opacity: 0.78;
+}
+
+.refresh-button {
+  min-width: 150px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.refresh-button.is-loading {
+  background: linear-gradient(135deg, #facc15, #c89b3c);
+  color: #111827;
+  box-shadow: 0 0 18px rgba(200, 155, 60, 0.28);
+}
+
+.button-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(17, 24, 39, 0.35);
+  border-top-color: #111827;
+  animation: buttonSpin 0.75s linear infinite;
+}
+
+@keyframes buttonSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .panel {
   border-radius: 22px;
   overflow: hidden;
+}
+
+.panel {
+  position: relative;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+}
+
+.panel.is-loading {
+  border-color: rgba(250, 204, 21, 0.72);
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.25),
+    0 0 0 1px rgba(250, 204, 21, 0.12),
+    0 0 34px rgba(200, 155, 60, 0.22);
+}
+
+.panel.is-loading .panel-header {
+  background:
+    linear-gradient(90deg, rgba(250, 204, 21, 0.12), rgba(31, 41, 55, 0.65) 45%, rgba(200, 155, 60, 0.09)),
+    rgba(31, 41, 55, 0.72);
 }
 
 .panel-header {
@@ -190,6 +248,44 @@ button:hover {
   padding: 18px 20px;
   border-bottom: 1px solid var(--border);
   background: rgba(31, 41, 55, 0.6);
+}
+
+.panel-loading-bar {
+  position: relative;
+  height: 3px;
+  overflow: hidden;
+  opacity: 0;
+  background: rgba(200, 155, 60, 0.12);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.panel-loading-bar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -42%;
+  width: 42%;
+  background: linear-gradient(90deg, transparent, #facc15, #c89b3c, transparent);
+  box-shadow: 0 0 18px rgba(250, 204, 21, 0.42);
+  animation: panelLoadingBar 1.05s ease-in-out infinite;
+}
+
+.panel.is-loading .panel-loading-bar {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+@keyframes panelLoadingBar {
+  0% {
+    left: -42%;
+  }
+
+  100% {
+    left: 100%;
+  }
 }
 
 .panel-title {
