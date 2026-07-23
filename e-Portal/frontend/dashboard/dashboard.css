@@ -34,9 +34,15 @@ body {
 }
 
 .page {
-  width: min(1200px, calc(100% - 32px));
+  width: min(1520px, calc(100% - 48px));
   margin: 0 auto;
   padding: 40px 0;
+}
+
+@media (min-width: 1600px) {
+  .page {
+    width: min(1640px, calc(100% - 64px));
+  }
 }
 
 .hero {
@@ -198,13 +204,70 @@ button:hover {
 }
 
 .table-wrap {
-  overflow-x: auto;
+  overflow-x: visible;
+}
+
+@media (max-width: 1320px) {
+  .table-wrap {
+    overflow-x: auto;
+  }
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 1280px;
+  min-width: 0;
+}
+
+@media (max-width: 1320px) {
+  table {
+    min-width: 1280px;
+  }
+}
+
+th:nth-child(1),
+td:nth-child(1) {
+  width: 64px;
+}
+
+th:nth-child(2),
+td:nth-child(2) {
+  width: 180px;
+}
+
+th:nth-child(3),
+td:nth-child(3) {
+  width: 150px;
+}
+
+th:nth-child(4),
+td:nth-child(4) {
+  width: 84px;
+}
+
+th:nth-child(7),
+td:nth-child(7) {
+  width: 108px;
+}
+
+th:nth-child(8),
+td:nth-child(8) {
+  width: 154px;
+}
+
+th:nth-child(9),
+td:nth-child(9) {
+  width: 220px;
+}
+
+th:nth-child(10),
+td:nth-child(10) {
+  width: 86px;
+}
+
+th:nth-child(11),
+td:nth-child(11) {
+  width: 116px;
 }
 
 th {
@@ -213,13 +276,13 @@ th {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  padding: 14px 18px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--border);
   background: rgba(11, 16, 32, 0.8);
 }
 
 td {
-  padding: 16px 18px;
+  padding: 16px 16px;
   border-bottom: 1px solid rgba(55, 65, 81, 0.7);
   vertical-align: middle;
 }
@@ -294,6 +357,12 @@ tr:last-child td {
   display: inline-flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 140px;
+}
+
+.account strong,
+.account span {
+  white-space: nowrap;
 }
 
 .account-link {
@@ -332,6 +401,7 @@ tr:last-child td {
   font-size: 13px;
   background: var(--card-2);
   border: 1px solid var(--border);
+  white-space: nowrap;
 }
 
 .rank-dot {
@@ -384,6 +454,7 @@ tr:last-child td {
 .lp {
   font-weight: 800;
   color: var(--accent);
+  white-space: nowrap;
 }
 
 .wl {
