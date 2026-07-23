@@ -5,6 +5,16 @@ const path = require("path");
 const PORT = process.env.PORT || 8080;
 const RIOT_API_KEY = process.env.RIOT_API_KEY;
 const DASHBOARD_TIME_ZONE = process.env.DASHBOARD_TIME_ZONE || "Europe/Zurich";
+const DASHBOARD_RANK_CACHE_MS = Number(process.env.DASHBOARD_RANK_CACHE_MS || 5 * 60 * 1000);
+const DASHBOARD_MATCH_CACHE_MS = Number(process.env.DASHBOARD_MATCH_CACHE_MS || 30 * 60 * 1000);
+const DASHBOARD_INGAME_CACHE_MS = Number(process.env.DASHBOARD_INGAME_CACHE_MS || 60 * 1000);
+const DASHBOARD_HISTORY_DAYS = 14;
+
+const RANKED_QUEUE_IDS = {
+  solo: 420,
+  flex: 440
+};
+
 
 const ACCOUNTS_FILE =
   process.env.ACCOUNTS_FILE || path.join(__dirname, "data", "accounts.json");
@@ -224,6 +234,144 @@ function getDailyRankChange(account, queue, currentScore, todayKey) {
   };
 }
 
+function normalizeQueueKey(queue) {
+  return queue === "flex" ? "flex" : "solo";
+}
+
+function isFreshTimestamp(updatedAt, ttlMs) {
+  if (!updatedAt || !ttlMs) return false;
+
+  const timestamp = Date.parse(updatedAt);
+
+  if (!Number.isFinite(timestamp)) return false;
+
+  return Date.now() - timestamp < ttlMs;
+}
+
+function getAccountIdentity(account) {
+  return {
+    region: String(account.region || "").trim().toLowerCase(),
+    gameName: String(account.gameName || "").trim(),
+    tagLine: String(account.tagLine || "").trim()
+  };
+}
+
+function isRankCacheForAccount(account, cacheData) {
+  if (!cacheData) return false;
+
+  const identity = getAccountIdentity(account);
+
+  return (
+    String(cacheData.region || "").toLowerCase() === identity.region &&
+    String(cacheData.gameName || "").toLowerCase() === identity.gameName.toLowerCase() &&
+    String(cacheData.tagLine || "").toLowerCase() === identity.tagLine.toLowerCase()
+  );
+}
+
+function ensureDashboardData(account) {
+  if (!account.dashboard || typeof account.dashboard !== "object" || Array.isArray(account.dashboard)) {
+    account.dashboard = {};
+  }
+
+  if (!account.dashboard.lpHistory || typeof account.dashboard.lpHistory !== "object") {
+    account.dashboard.lpHistory = {};
+  }
+
+  if (!Array.isArray(account.dashboard.lpHistory.solo)) {
+    account.dashboard.lpHistory.solo = [];
+  }
+
+  if (!Array.isArray(account.dashboard.lpHistory.flex)) {
+    account.dashboard.lpHistory.flex = [];
+  }
+
+  if (!account.dashboard.recentMatches || typeof account.dashboard.recentMatches !== "object") {
+    account.dashboard.recentMatches = {};
+  }
+
+  for (const queue of ["solo", "flex"]) {
+    if (!account.dashboard.recentMatches[queue] || typeof account.dashboard.recentMatches[queue] !== "object") {
+      account.dashboard.recentMatches[queue] = {
+        updatedAt: null,
+        matches: []
+      };
+    }
+
+    if (!Array.isArray(account.dashboard.recentMatches[queue].matches)) {
+      account.dashboard.recentMatches[queue].matches = [];
+    }
+  }
+
+  if (!account.dashboard.deeplolBadges || typeof account.dashboard.deeplolBadges !== "object") {
+    account.dashboard.deeplolBadges = {};
+  }
+
+  if (!account.dashboard.inGameStatus || typeof account.dashboard.inGameStatus !== "object") {
+    account.dashboard.inGameStatus = {
+      updatedAt: null,
+      inGame: false,
+      gameMode: null,
+      gameType: null,
+      gameStartTime: null,
+      error: null
+    };
+  }
+
+  return account.dashboard;
+}
+
+function trimLpHistory(history) {
+  return [...(history || [])]
+    .filter(entry => entry && entry.date && typeof entry.score === "number")
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+    .slice(-Math.max(DASHBOARD_HISTORY_DAYS, 14));
+}
+
+function recordLpHistory(account, queue, queueData, todayKey) {
+  const dashboard = ensureDashboardData(account);
+  const queueKey = normalizeQueueKey(queue);
+  const history = trimLpHistory(dashboard.lpHistory[queueKey]);
+  const score = Number(queueData?.score) || 0;
+  const entry = {
+    date: todayKey,
+    score,
+    lp: Number(queueData?.lp) || 0,
+    tier: queueData?.tier || "UNRANKED",
+    rank: queueData?.rank || "",
+    updatedAt: new Date().toISOString()
+  };
+  const existingIndex = history.findIndex(item => item.date === todayKey);
+  const before = JSON.stringify(history);
+
+  if (existingIndex >= 0) {
+    history[existingIndex] = {
+      ...history[existingIndex],
+      ...entry
+    };
+  } else {
+    history.push(entry);
+  }
+
+  dashboard.lpHistory[queueKey] = trimLpHistory(history);
+
+  return before !== JSON.stringify(dashboard.lpHistory[queueKey]);
+}
+
+function getPublicLpHistory(account, queue) {
+  const dashboard = ensureDashboardData(account);
+  return trimLpHistory(dashboard.lpHistory[normalizeQueueKey(queue)]);
+}
+
+function getCachedRecentMatches(account, queue) {
+  const dashboard = ensureDashboardData(account);
+  return dashboard.recentMatches[normalizeQueueKey(queue)] || {
+    updatedAt: null,
+    matches: []
+  };
+}
+
+let dashboardChampionAssetCache = null;
+
 async function ensureBraveryStateFile() {
   await fs.mkdir(path.dirname(BRAVERY_STATE_FILE), { recursive: true });
 
@@ -418,93 +566,354 @@ async function getAccountInGameStatus(region, puuid) {
   }
 }
 
-async function getAccountRankData(account) {
+async function getCachedAccountInGameStatus(account, region, puuid, options = {}) {
+  const dashboard = ensureDashboardData(account);
+  const cached = dashboard.inGameStatus;
+
+  if (!options.forceRefresh && cached && isFreshTimestamp(cached.updatedAt, DASHBOARD_INGAME_CACHE_MS)) {
+    return {
+      inGame: cached.inGame === true,
+      gameMode: cached.gameMode || null,
+      gameType: cached.gameType || null,
+      gameStartTime: cached.gameStartTime || null,
+      error: cached.error || null
+    };
+  }
+
+  const status = await getAccountInGameStatus(region, puuid);
+
+  dashboard.inGameStatus = {
+    ...status,
+    updatedAt: new Date().toISOString()
+  };
+
+  return status;
+}
+
+async function getAccountRankData(account, options = {}) {
+  const forceRefresh = options.forceRefresh === true;
+  const cachedRank = account.rankCache;
+
+  if (
+    !forceRefresh &&
+    cachedRank?.data &&
+    isRankCacheForAccount(account, cachedRank.data) &&
+    isFreshTimestamp(cachedRank.updatedAt, DASHBOARD_RANK_CACHE_MS)
+  ) {
+    return {
+      ...cachedRank.data,
+      label: account.label,
+      riotId: `${account.gameName}#${account.tagLine}`,
+      region: account.region,
+      gameName: account.gameName,
+      tagLine: account.tagLine,
+      fromCache: true,
+      cacheError: null
+    };
+  }
+
   const regional = regionalRoute[account.region];
 
   if (!regional) {
     throw new Error(`Unbekannte Region: ${account.region}`);
   }
 
-  const riotAccount = await riotFetch(
-    `https://${regional}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(account.gameName)}/${encodeURIComponent(account.tagLine)}`
-  );
+  try {
+    const riotAccount = await riotFetch(
+      `https://${regional}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(account.gameName)}/${encodeURIComponent(account.tagLine)}`
+    );
 
-  if (!riotAccount || !riotAccount.puuid) {
-    throw new Error(`Keine PUUID gefunden für ${account.gameName}#${account.tagLine}`);
+    if (!riotAccount || !riotAccount.puuid) {
+      throw new Error(`Keine PUUID gefunden für ${account.gameName}#${account.tagLine}`);
+    }
+
+    const leagues = await riotFetch(
+      `https://${account.region}.api.riotgames.com/lol/league/v4/entries/by-puuid/${riotAccount.puuid}`
+    );
+
+    const soloq = Array.isArray(leagues)
+      ? leagues.find(entry => entry.queueType === "RANKED_SOLO_5x5")
+      : null;
+
+    const flex = Array.isArray(leagues)
+      ? leagues.find(entry => entry.queueType === "RANKED_FLEX_SR")
+      : null;
+
+    const data = {
+      label: account.label,
+      riotId: `${account.gameName}#${account.tagLine}`,
+      region: account.region,
+      gameName: account.gameName,
+      tagLine: account.tagLine,
+      puuid: riotAccount.puuid,
+
+      soloq: soloq
+        ? {
+            tier: soloq.tier,
+            rank: soloq.rank,
+            lp: soloq.leaguePoints,
+            wins: soloq.wins,
+            losses: soloq.losses,
+            score: getRankScore(soloq)
+          }
+        : {
+            tier: "UNRANKED",
+            rank: "",
+            lp: 0,
+            wins: 0,
+            losses: 0,
+            score: 0
+          },
+
+      flex: flex
+        ? {
+            tier: flex.tier,
+            rank: flex.rank,
+            lp: flex.leaguePoints,
+            wins: flex.wins,
+            losses: flex.losses,
+            score: getRankScore(flex)
+          }
+        : {
+            tier: "UNRANKED",
+            rank: "",
+            lp: 0,
+            wins: 0,
+            losses: 0,
+            score: 0
+          }
+    };
+
+    account.rankCache = {
+      updatedAt: new Date().toISOString(),
+      data
+    };
+
+    return {
+      ...data,
+      fromCache: false,
+      cacheError: null
+    };
+  } catch (error) {
+    if (cachedRank?.data && isRankCacheForAccount(account, cachedRank.data)) {
+      return {
+        ...cachedRank.data,
+        label: account.label,
+        riotId: `${account.gameName}#${account.tagLine}`,
+        region: account.region,
+        gameName: account.gameName,
+        tagLine: account.tagLine,
+        fromCache: true,
+        cacheError: error.message
+      };
+    }
+
+    throw error;
+  }
+}
+
+async function getDashboardChampionAssets() {
+  if (dashboardChampionAssetCache && isFreshTimestamp(dashboardChampionAssetCache.updatedAt, 24 * 60 * 60 * 1000)) {
+    return dashboardChampionAssetCache;
   }
 
-  const leagues = await riotFetch(
-    `https://${account.region}.api.riotgames.com/lol/league/v4/entries/by-puuid/${riotAccount.puuid}`
+  const versions = await fetchDataDragonJson(
+    "https://ddragon.leagueoflegends.com/api/versions.json"
+  );
+  const version = versions[0];
+
+  if (!version) {
+    throw new Error("Keine Data-Dragon-Version gefunden");
+  }
+
+  const championData = await fetchDataDragonJson(
+    `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/champion.json`
   );
 
-  const soloq = Array.isArray(leagues)
-    ? leagues.find(entry => entry.queueType === "RANKED_SOLO_5x5")
-    : null;
+  const byKey = {};
+  const byId = {};
+  const byName = {};
 
-  const flex = Array.isArray(leagues)
-    ? leagues.find(entry => entry.queueType === "RANKED_FLEX_SR")
-    : null;
+  for (const champion of Object.values(championData.data || {})) {
+    const imageName = champion.image?.full || `${champion.id}.png`;
+    const asset = {
+      id: champion.id,
+      key: String(champion.key || ""),
+      name: champion.name || champion.id,
+      imageUrl: `https://ddragon.leagueoflegends.com/cdn/${version}/img/champion/${imageName}`
+    };
+
+    if (asset.key) byKey[asset.key] = asset;
+    byId[String(asset.id).toLowerCase()] = asset;
+    byName[String(asset.name).toLowerCase()] = asset;
+  }
+
+  dashboardChampionAssetCache = {
+    updatedAt: new Date().toISOString(),
+    version,
+    byKey,
+    byId,
+    byName
+  };
+
+  return dashboardChampionAssetCache;
+}
+
+function getMatchPlayedAt(matchInfo) {
+  const timestamp = matchInfo?.gameEndTimestamp || matchInfo?.gameCreation;
+
+  if (!timestamp) return null;
+
+  return new Date(timestamp).toISOString();
+}
+
+function getChampionAssetForParticipant(assets, participant) {
+  const byKey = assets.byKey[String(participant?.championId || "")];
+  if (byKey) return byKey;
+
+  const normalizedName = String(participant?.championName || "").toLowerCase();
+  const byId = assets.byId[normalizedName];
+  if (byId) return byId;
+
+  const byName = assets.byName[normalizedName];
+  if (byName) return byName;
 
   return {
-    label: account.label,
-    riotId: `${account.gameName}#${account.tagLine}`,
-    region: account.region,
-    gameName: account.gameName,
-    tagLine: account.tagLine,
-    puuid: riotAccount.puuid,
-
-    soloq: soloq
-      ? {
-          tier: soloq.tier,
-          rank: soloq.rank,
-          lp: soloq.leaguePoints,
-          wins: soloq.wins,
-          losses: soloq.losses,
-          score: getRankScore(soloq)
-        }
-      : {
-          tier: "UNRANKED",
-          rank: "",
-          lp: 0,
-          wins: 0,
-          losses: 0,
-          score: 0
-        },
-
-    flex: flex
-      ? {
-          tier: flex.tier,
-          rank: flex.rank,
-          lp: flex.leaguePoints,
-          wins: flex.wins,
-          losses: flex.losses,
-          score: getRankScore(flex)
-        }
-      : {
-          tier: "UNRANKED",
-          rank: "",
-          lp: 0,
-          wins: 0,
-          losses: 0,
-          score: 0
-        }
+    id: participant?.championName || String(participant?.championId || "unknown"),
+    key: String(participant?.championId || ""),
+    name: participant?.championName || "Unbekannt",
+    imageUrl: null
   };
 }
 
-async function getAccountsWithRank() {
+async function getRecentMatchesForAccount(account, puuid, queue, options = {}) {
+  const queueKey = normalizeQueueKey(queue);
+  const forceRefresh = options.forceRefresh === true;
+  const cached = getCachedRecentMatches(account, queueKey);
+
+  if (!forceRefresh && isFreshTimestamp(cached.updatedAt, DASHBOARD_MATCH_CACHE_MS)) {
+    return {
+      matches: cached.matches || [],
+      updated: false,
+      error: null
+    };
+  }
+
+  if (!RIOT_API_KEY || !puuid) {
+    return {
+      matches: cached.matches || [],
+      updated: false,
+      error: RIOT_API_KEY ? null : "RIOT_API_KEY fehlt"
+    };
+  }
+
+  const regional = regionalRoute[account.region];
+  const queueId = RANKED_QUEUE_IDS[queueKey];
+
+  if (!regional || !queueId) {
+    return {
+      matches: cached.matches || [],
+      updated: false,
+      error: "Ungültige Queue oder Region"
+    };
+  }
+
+  try {
+    const matchIds = await riotFetch(
+      `https://${regional}.api.riotgames.com/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids?queue=${queueId}&start=0&count=5`
+    );
+
+    const assets = await getDashboardChampionAssets();
+    const cachedByMatchId = new Map((cached.matches || []).map(match => [match.matchId, match]));
+    const matches = [];
+
+    for (const matchId of (Array.isArray(matchIds) ? matchIds : []).slice(0, 5)) {
+      const cachedMatch = cachedByMatchId.get(matchId);
+
+      if (cachedMatch && typeof cachedMatch.win === "boolean" && cachedMatch.championIconUrl) {
+        matches.push(cachedMatch);
+        continue;
+      }
+
+      const match = await riotFetch(
+        `https://${regional}.api.riotgames.com/lol/match/v5/matches/${encodeURIComponent(matchId)}`
+      );
+      const participant = Array.isArray(match?.info?.participants)
+        ? match.info.participants.find(item => item.puuid === puuid)
+        : null;
+
+      if (!participant) {
+        continue;
+      }
+
+      const champion = getChampionAssetForParticipant(assets, participant);
+
+      matches.push({
+        matchId,
+        queue: queueKey,
+        queueId: match?.info?.queueId || queueId,
+        championId: String(participant.championId || champion.key || champion.id),
+        championName: champion.name || participant.championName || "Unbekannt",
+        championIconUrl: champion.imageUrl,
+        win: typeof participant.win === "boolean" ? participant.win : null,
+        playedAt: getMatchPlayedAt(match?.info),
+        badge: null
+      });
+    }
+
+    const dashboard = ensureDashboardData(account);
+    dashboard.recentMatches[queueKey] = {
+      updatedAt: new Date().toISOString(),
+      matches
+    };
+
+    return {
+      matches,
+      updated: true,
+      error: null
+    };
+  } catch (error) {
+    console.warn(`Recent Matches konnten für ${account.gameName}#${account.tagLine} nicht geladen werden:`, error.message);
+
+    return {
+      matches: cached.matches || [],
+      updated: false,
+      error: error.message
+    };
+  }
+}
+
+async function getAccountsWithRank(options = {}) {
   const accounts = await readAccounts();
   const result = [];
   const todayKey = getDashboardDateKey();
+  const matchQueue = normalizeQueueKey(options.matchQueue);
+  const forceRefresh = options.forceRefresh === true;
   let accountsChanged = false;
 
   for (const account of accounts) {
     try {
-      const data = await getAccountRankData(account);
-      const activeGame = await getAccountInGameStatus(data.region, data.puuid);
+      ensureDashboardData(account);
+      const rankCacheBefore = JSON.stringify(account.rankCache || null);
+      const dashboardBefore = JSON.stringify(account.dashboard || null);
+      const data = await getAccountRankData(account, { forceRefresh });
+      const activeGame = await getCachedAccountInGameStatus(account, data.region, data.puuid, { forceRefresh });
       const soloDaily = getDailyRankChange(account, "solo", data.soloq.score, todayKey);
       const flexDaily = getDailyRankChange(account, "flex", data.flex.score, todayKey);
+      const soloHistoryChanged = recordLpHistory(account, "solo", data.soloq, todayKey);
+      const flexHistoryChanged = recordLpHistory(account, "flex", data.flex, todayKey);
+      const recent = await getRecentMatchesForAccount(account, data.puuid, matchQueue, {
+        forceRefresh
+      });
 
-      accountsChanged = accountsChanged || soloDaily.updated || flexDaily.updated;
+      accountsChanged = accountsChanged ||
+        soloDaily.updated ||
+        flexDaily.updated ||
+        soloHistoryChanged ||
+        flexHistoryChanged ||
+        recent.updated ||
+        rankCacheBefore !== JSON.stringify(account.rankCache || null) ||
+        dashboardBefore !== JSON.stringify(account.dashboard || null);
 
       result.push({
         label: data.label,
@@ -512,6 +921,9 @@ async function getAccountsWithRank() {
         region: data.region,
         gameName: data.gameName,
         tagLine: data.tagLine,
+        puuid: data.puuid,
+        rankFromCache: data.fromCache === true,
+        rankCacheError: data.cacheError || null,
         inGame: activeGame.inGame === true,
         gameMode: activeGame.gameMode,
         gameType: activeGame.gameType,
@@ -525,6 +937,9 @@ async function getAccountsWithRank() {
         losses: data.soloq.losses,
         score: data.soloq.score,
         dailyChange: soloDaily.change,
+        lpHistory: getPublicLpHistory(account, "solo"),
+        recentMatches: getCachedRecentMatches(account, "solo").matches || [],
+        recentMatchesError: getCachedRecentMatches(account, "solo").error || null,
 
         flexTier: data.flex.tier,
         flexRank: data.flex.rank,
@@ -533,6 +948,9 @@ async function getAccountsWithRank() {
         flexLosses: data.flex.losses,
         flexScore: data.flex.score,
         flexDailyChange: flexDaily.change,
+        flexLpHistory: getPublicLpHistory(account, "flex"),
+        flexRecentMatches: getCachedRecentMatches(account, "flex").matches || [],
+        flexRecentMatchesError: getCachedRecentMatches(account, "flex").error || null,
 
         error: null
       });
@@ -556,6 +974,8 @@ async function getAccountsWithRank() {
         losses: 0,
         score: -1,
         dailyChange: 0,
+        lpHistory: getPublicLpHistory(account, "solo"),
+        recentMatches: getCachedRecentMatches(account, "solo").matches || [],
 
         flexTier: "ERROR",
         flexRank: "",
@@ -564,6 +984,8 @@ async function getAccountsWithRank() {
         flexLosses: 0,
         flexScore: -1,
         flexDailyChange: 0,
+        flexLpHistory: getPublicLpHistory(account, "flex"),
+        flexRecentMatches: getCachedRecentMatches(account, "flex").matches || [],
 
         error: error.message
       });
@@ -637,7 +1059,7 @@ async function addAccount(input) {
     throw new Error("Dieser Account ist bereits vorhanden");
   }
 
-  await getAccountRankData(newAccount);
+  await getAccountRankData(newAccount, { forceRefresh: true });
 
   accounts.push(newAccount);
   await writeAccounts(accounts);
@@ -1919,7 +2341,10 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/api/accounts") {
       try {
-        const data = await getAccountsWithRank();
+        const data = await getAccountsWithRank({
+          forceRefresh: url.searchParams.get("refresh") === "1",
+          matchQueue: normalizeQueueKey(url.searchParams.get("queue"))
+        });
         sendJson(res, 200, data);
       } catch (error) {
         sendJson(res, 500, {

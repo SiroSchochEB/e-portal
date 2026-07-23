@@ -32,7 +32,9 @@ function getQueueData(account, queue) {
       wins: account.flexWins,
       losses: account.flexLosses,
       score: account.flexScore,
-      dailyChange: account.flexDailyChange || 0
+      dailyChange: account.flexDailyChange || 0,
+      lpHistory: account.flexLpHistory || [],
+      recentMatches: account.flexRecentMatches || []
     };
   }
 
@@ -43,7 +45,9 @@ function getQueueData(account, queue) {
     wins: account.wins,
     losses: account.losses,
     score: account.score,
-    dailyChange: account.dailyChange || 0
+    dailyChange: account.dailyChange || 0,
+    lpHistory: account.lpHistory || [],
+    recentMatches: account.recentMatches || []
   };
 }
 
@@ -84,6 +88,142 @@ function renderDailyChange(change) {
       : "±0 LP";
 
   return `<span class="${changeClass}">${escapeHtml(label)}</span>`;
+}
+
+function getDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function getLastDateKeys(count) {
+  const result = [];
+  const today = new Date();
+
+  for (let offset = count - 1; offset >= 0; offset--) {
+    const date = new Date(today);
+    date.setDate(today.getDate() - offset);
+    result.push(getDateKey(date));
+  }
+
+  return result;
+}
+
+function getSparklinePoints(history) {
+  const historyByDate = new Map(
+    (history || [])
+      .filter(entry => entry && entry.date && Number.isFinite(Number(entry.score)))
+      .map(entry => [entry.date, Number(entry.score)])
+  );
+  const values = [];
+  let lastKnownValue = null;
+
+  for (const dateKey of getLastDateKeys(14)) {
+    if (historyByDate.has(dateKey)) {
+      lastKnownValue = historyByDate.get(dateKey);
+    }
+
+    values.push(lastKnownValue);
+  }
+
+  return values;
+}
+
+function renderLpSparkline(history) {
+  const values = getSparklinePoints(history);
+  const numericValues = values.filter(value => Number.isFinite(value));
+
+  if (numericValues.length === 0) {
+    return `<div class="sparkline-empty">Keine Daten</div>`;
+  }
+
+  const width = 124;
+  const height = 34;
+  const padding = 4;
+  const min = Math.min(...numericValues);
+  const max = Math.max(...numericValues);
+  const spread = max - min || 1;
+  const pointDistance = (width - padding * 2) / Math.max(values.length - 1, 1);
+  let path = "";
+  let lastPoint = null;
+
+  if (numericValues.length === 1) {
+    const y = height / 2;
+    path = `M${padding} ${y.toFixed(1)} L${(width - padding).toFixed(1)} ${y.toFixed(1)}`;
+  } else {
+    values.forEach((value, index) => {
+      if (!Number.isFinite(value)) {
+        return;
+      }
+
+      const x = padding + index * pointDistance;
+      const y = height - padding - ((value - min) / spread) * (height - padding * 2);
+      const command = lastPoint ? "L" : "M";
+
+      path += `${command}${x.toFixed(1)} ${y.toFixed(1)} `;
+      lastPoint = { x, y };
+    });
+  }
+
+  const latest = numericValues[numericValues.length - 1];
+  const first = numericValues[0];
+  const trendClass = latest > first
+    ? "positive"
+    : latest < first
+      ? "negative"
+      : "neutral";
+  const title = `${first} → ${latest} Score`;
+
+  return `
+    <svg class="sparkline ${trendClass}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title)}">
+      <title>${escapeHtml(title)}</title>
+      <path d="${escapeHtml(path.trim())}" />
+    </svg>
+  `;
+}
+
+function renderRecentMatches(matches) {
+  const safeMatches = Array.isArray(matches) ? matches.slice(0, 5) : [];
+
+  if (safeMatches.length === 0) {
+    return `<span class="recent-empty">Keine Daten</span>`;
+  }
+
+  return `
+    <div class="recent-champs">
+      ${safeMatches.map(match => {
+        const resultClass = match.win === true
+          ? "win"
+          : match.win === false
+            ? "loss"
+            : "unknown";
+        const resultLabel = match.win === true
+          ? "Win"
+          : match.win === false
+            ? "Loss"
+            : "Unbekannt";
+        const badge = String(match.badge || "").toUpperCase();
+        const titleParts = [match.championName || "Unbekannter Champion", resultLabel];
+
+        if (badge === "MVP" || badge === "ACE") {
+          titleParts.push(badge);
+        }
+
+        return `
+          <span class="champ-match ${resultClass}" title="${escapeHtml(titleParts.join(" · "))}">
+            ${match.championIconUrl
+              ? `<img src="${escapeHtml(match.championIconUrl)}" alt="${escapeHtml(match.championName || "Champion")}" loading="lazy" />`
+              : `<span class="champ-fallback">?</span>`}
+            ${badge === "MVP" || badge === "ACE"
+              ? `<span class="match-badge ${badge.toLowerCase()}">${escapeHtml(badge)}</span>`
+              : ""}
+          </span>
+        `;
+      }).join("")}
+    </div>
+  `;
 }
 
 function renderStats(accounts) {
@@ -179,6 +319,10 @@ function renderTable() {
 
         <td>${renderDailyChange(queueData.dailyChange)}</td>
 
+        <td>${renderLpSparkline(queueData.lpHistory)}</td>
+
+        <td>${renderRecentMatches(queueData.recentMatches)}</td>
+
         <td>${queueData.score || 0}</td>
 
         <td>
@@ -210,16 +354,22 @@ function renderTable() {
   empty.style.display = "none";
 }
 
-async function loadAccounts() {
+async function loadAccounts(forceRefresh = false) {
   const status = document.getElementById("status");
   const errorBox = document.getElementById("error");
   const table = document.getElementById("table");
+  const queue = document.getElementById("queueSelect").value;
+  const params = new URLSearchParams({ queue });
+
+  if (forceRefresh) {
+    params.set("refresh", "1");
+  }
 
   try {
     errorBox.innerHTML = "";
-    status.textContent = "Lade Accounts...";
+    status.textContent = forceRefresh ? "Aktualisiere Accounts..." : "Lade Accounts...";
 
-    const response = await fetch("/api/accounts");
+    const response = await fetch(`/api/accounts?${params.toString()}`);
     const data = await response.json();
 
     if (!response.ok) {
@@ -267,7 +417,7 @@ async function addAccount(event) {
 
   document.getElementById("addAccountForm").reset();
 
-  await loadAccounts();
+  await loadAccounts(true);
 }
 
 async function deleteAccount(region, gameName, tagLine) {
@@ -296,12 +446,12 @@ async function deleteAccount(region, gameName, tagLine) {
     return;
   }
 
-  await loadAccounts();
+  await loadAccounts(true);
 }
 
-document.getElementById("queueSelect").addEventListener("change", renderTable);
+document.getElementById("queueSelect").addEventListener("change", () => loadAccounts(false));
 document.getElementById("addAccountForm").addEventListener("submit", addAccount);
-document.getElementById("refreshButton").addEventListener("click", loadAccounts);
+document.getElementById("refreshButton").addEventListener("click", () => loadAccounts(true));
 
-loadAccounts();
-setInterval(loadAccounts, 5 * 60 * 1000);
+loadAccounts(false);
+setInterval(() => loadAccounts(false), 5 * 60 * 1000);
