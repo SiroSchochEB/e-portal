@@ -135,16 +135,20 @@ function getLastDateKeys(count) {
   return result;
 }
 
-function getSparklinePoints(history) {
+function getSparklinePoints(history, currentScore, dailyChange) {
+  const dateKeys = getLastDateKeys(14);
   const historyByDate = new Map(
     (history || [])
       .filter(entry => entry && entry.date && Number.isFinite(Number(entry.score)))
       .map(entry => [entry.date, Number(entry.score)])
   );
+  const actualValues = dateKeys
+    .filter(dateKey => historyByDate.has(dateKey))
+    .map(dateKey => historyByDate.get(dateKey));
   const values = [];
   let lastKnownValue = null;
 
-  for (const dateKey of getLastDateKeys(14)) {
+  for (const dateKey of dateKeys) {
     if (historyByDate.has(dateKey)) {
       lastKnownValue = historyByDate.get(dateKey);
     }
@@ -152,15 +156,43 @@ function getSparklinePoints(history) {
     values.push(lastKnownValue);
   }
 
-  return values;
+  if (actualValues.length >= 2) {
+    return {
+      values,
+      mode: "history"
+    };
+  }
+
+  const safeCurrentScore = Number(currentScore);
+  const safeDailyChange = Number(dailyChange) || 0;
+
+  if (Number.isFinite(safeCurrentScore) && safeDailyChange !== 0) {
+    const syntheticValues = Array(14).fill(null);
+    syntheticValues[12] = safeCurrentScore - safeDailyChange;
+    syntheticValues[13] = safeCurrentScore;
+
+    return {
+      values: syntheticValues,
+      mode: "today"
+    };
+  }
+
+  return {
+    values,
+    mode: "pending"
+  };
 }
 
-function renderLpSparkline(history) {
-  const values = getSparklinePoints(history);
+function renderLpSparkline(history, currentScore, dailyChange) {
+  const { values, mode } = getSparklinePoints(history, currentScore, dailyChange);
   const numericValues = values.filter(value => Number.isFinite(value));
 
   if (numericValues.length === 0) {
     return `<div class="sparkline-empty">Keine Daten</div>`;
+  }
+
+  if (numericValues.length === 1 && mode === "pending") {
+    return `<div class="sparkline-empty" title="Noch nicht genug gespeicherte Tageswerte für einen Verlauf.">No data</div>`;
   }
 
   const width = 124;
@@ -171,24 +203,26 @@ function renderLpSparkline(history) {
   const spread = max - min || 1;
   const pointDistance = (width - padding * 2) / Math.max(values.length - 1, 1);
   let path = "";
+  const points = [];
   let lastPoint = null;
 
-  if (numericValues.length === 1) {
+  values.forEach((value, index) => {
+    if (!Number.isFinite(value)) {
+      return;
+    }
+
+    const x = padding + index * pointDistance;
+    const y = height - padding - ((value - min) / spread) * (height - padding * 2);
+    const command = lastPoint ? "L" : "M";
+
+    path += `${command}${x.toFixed(1)} ${y.toFixed(1)} `;
+    lastPoint = { x, y };
+    points.push(lastPoint);
+  });
+
+  if (!path && numericValues.length === 1) {
     const y = height / 2;
     path = `M${padding} ${y.toFixed(1)} L${(width - padding).toFixed(1)} ${y.toFixed(1)}`;
-  } else {
-    values.forEach((value, index) => {
-      if (!Number.isFinite(value)) {
-        return;
-      }
-
-      const x = padding + index * pointDistance;
-      const y = height - padding - ((value - min) / spread) * (height - padding * 2);
-      const command = lastPoint ? "L" : "M";
-
-      path += `${command}${x.toFixed(1)} ${y.toFixed(1)} `;
-      lastPoint = { x, y };
-    });
   }
 
   const latest = numericValues[numericValues.length - 1];
@@ -198,12 +232,15 @@ function renderLpSparkline(history) {
     : latest < first
       ? "negative"
       : "neutral";
-  const title = `${first} → ${latest} Score`;
+  const title = mode === "today"
+    ? `Heute: ${first} → ${latest} Score`
+    : `14 Tage: ${first} → ${latest} Score`;
 
   return `
     <svg class="sparkline ${trendClass}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title)}">
       <title>${escapeHtml(title)}</title>
       <path d="${escapeHtml(path.trim())}" />
+      ${points.map(point => `<circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="2" />`).join("")}
     </svg>
   `;
 }
@@ -343,7 +380,7 @@ function renderTable() {
 
         <td>${renderDailyChange(queueData.dailyChange)}</td>
 
-        <td>${renderLpSparkline(queueData.lpHistory)}</td>
+        <td>${renderLpSparkline(queueData.lpHistory, queueData.score, queueData.dailyChange)}</td>
 
         <td>${renderRecentMatches(queueData.recentMatches)}</td>
 
