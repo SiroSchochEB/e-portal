@@ -1,74 +1,38 @@
 [
   {
-    "label": "Siro",
+    "label": "Main",
     "region": "euw1",
-    "gameName": "Hated",
+    "gameName": "hated",
     "tagLine": "123"
   },
   {
-    "label": "Pasquale",
+    "label": "Mid",
     "region": "euw1",
-    "gameName": "Rocca",
-    "tagLine": "EUW"
+    "gameName": "hated",
+    "tagLine": "mid"
+  },
+  {
+    "label": "Top",
+    "region": "euw1",
+    "gameName": "hated",
+    "tagLine": "top"
+  },
+  {
+    "label": "Jungle",
+    "region": "euw1",
+    "gameName": "legalee blind",
+    "tagLine": "euw"
+  },
+  {
+    "label": "Fill",
+    "region": "euw1",
+    "gameName": "fills bad man",
+    "tagLine": "fill"
   },
   {
     "label": "Mika",
     "region": "euw1",
     "gameName": "Gnogger",
-    "tagLine": "EUw"
-  },
-  {
-    "label": "Pascal",
-    "region": "euw1",
-    "gameName": "CC ya later",
-    "tagLine": "stun"
-  },
-  {
-    "label": "Beni",
-    "region": "euw1",
-    "gameName": "Stoned Teddybear",
-    "tagLine": "euw"
-  },
-  {
-    "label": "Philipp",
-    "region": "euw1",
-    "gameName": "Tobler",
-    "tagLine": "tob"
-  },
-  {
-    "label": "Franco",
-    "region": "euw1",
-    "gameName": "Palermo",
-    "tagLine": "Euw"
-  },
-  {
-    "label": "Siro Jungle",
-    "region": "euw1",
-    "gameName": "Legalee blind",
-    "tagLine": "euw"
-  },
-  {
-    "label": "Mika Smurf",
-    "region": "euw1",
-    "gameName": "Minothereal",
-    "tagLine": "euw"
-  },
-  {
-    "label": "Simon",
-    "region": "euw1",
-    "gameName": "Shrowhurter",
-    "tagLine": "uwu"
-  },
-  {
-    "label": "Imi",
-    "region": "euw1",
-    "gameName": "Imrox",
-    "tagLine": "euw"
-  },
-  {
-    "label": "Fabian",
-    "region": "euw1",
-    "gameName": "Ocura",
     "tagLine": "euw"
   }
 ]

@@ -112,6 +112,19 @@ function updateResetButton(state = currentState) {
     : "Neues Spiel";
 }
 
+function clearRoleSelection() {
+  selectedRole = "";
+
+  const roleInput = document.getElementById("roleInput");
+  if (roleInput) {
+    roleInput.value = "";
+  }
+
+  document.querySelectorAll(".role-button").forEach(button => {
+    button.classList.remove("active");
+  });
+}
+
 function isLastPlayerReroll(selection) {
   const event = currentState.lastPlayerReroll;
 
@@ -487,6 +500,7 @@ function renderState(state, options = {}) {
     container.innerHTML = "";
 
     roleSelect.style.display = "none";
+    clearRoleSelection();
     renderPlayers(selections);
 
     if (selections.length > 0) {
@@ -504,6 +518,7 @@ function renderState(state, options = {}) {
 
   if (currentPlayerSelection) {
     roleSelect.style.display = "none";
+    clearRoleSelection();
 
     container.innerHTML = `
       <div class="locked-choice">
@@ -538,20 +553,35 @@ function renderState(state, options = {}) {
 
     const revealClass = options.animateChampions ? "" : "no-reveal";
 
-    container.innerHTML = champions.map(champion => `
-      <article class="champion-card ${revealClass}">
-        <img src="${escapeHtml(champion.splashUrl)}" alt="${escapeHtml(champion.name)}" />
+    container.innerHTML = `
+      ${champions.map(champion => `
+        <article class="champion-card ${revealClass}">
+          <img src="${escapeHtml(champion.splashUrl)}" alt="${escapeHtml(champion.name)}" />
+
+          <div class="champion-body">
+            <h3>${escapeHtml(champion.name)}</h3>
+            <p>${escapeHtml(champion.title)}</p>
+
+            <button type="button" data-champion-id="${escapeHtml(champion.id)}">
+              Auswählen
+            </button>
+          </div>
+        </article>
+      `).join("")}
+
+      <article class="champion-card champion-random-card ${revealClass}">
+        <div class="random-champion-symbol" aria-hidden="true">?</div>
 
         <div class="champion-body">
-          <h3>${escapeHtml(champion.name)}</h3>
-          <p>${escapeHtml(champion.title)}</p>
+          <h3>Zufall</h3>
+          <p>Komplett zufälliger Champion aus dem Pool.</p>
 
-          <button type="button" data-champion-id="${escapeHtml(champion.id)}">
-            Auswählen
+          <button type="button" data-champion-id="random">
+            ? auswählen
           </button>
         </div>
       </article>
-    `).join("");
+    `;
 
     document.querySelectorAll("[data-champion-id]").forEach(button => {
       button.addEventListener("click", () => selectChampion(button.dataset.championId));
@@ -842,14 +872,7 @@ async function resetGame() {
     }
 
     if (!(data.selections || []).length && !Object.keys(data.rolls || {}).length) {
-      localStorage.removeItem("braveryPlayerName");
-
-      selectedRole = "";
-      document.getElementById("roleInput").value = "";
-
-      document.querySelectorAll(".role-button").forEach(button => {
-        button.classList.remove("active");
-      });
+      clearRoleSelection();
     }
 
     lastRenderedSignature = "";

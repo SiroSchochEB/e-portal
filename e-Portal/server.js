@@ -110,7 +110,8 @@ const BLOCKED_SPECIAL_ITEM_NAMES = new Set([
 
   // Weitere ARAM-/Mode-Items
   "Poro-Snax",
-  "The Golden Spatula"
+  "The Golden Spatula",
+  "Gargoyle Stoneplate"
 ]);
 
 const BLOCKED_BUILD_ITEM_NAMES = new Set([
@@ -131,7 +132,8 @@ const BLOCKED_BUILD_ITEM_IDS = new Set([
   "3867",
   "3869",
   "3870",
-  "3871"
+  "3871",
+  "3193" // Gargoyle Stoneplate
 ]);
 
 const SUMMONER_SPELLS = [
@@ -150,7 +152,9 @@ const ITEM_VOTES_PER_PLAYER = 3;
 const ITEM_REROLL_VOTE_THRESHOLD = 3;
 
 function getFinalItemCountForRole(role) {
-  return role === "adc" ? 7 : 6;
+  if (role === "support") return 5;
+  if (role === "adc") return 7;
+  return 6;
 }
 
 async function ensureAccountsFile() {
@@ -740,6 +744,10 @@ async function getRandomChampionExcept(version, excludedChampionIds = []) {
   }
 
   return champion;
+}
+
+async function getRandomChampion(version) {
+  return getRandomChampionExcept(version, []);
 }
 
 function toPublicItem(item, itemType) {
@@ -1516,7 +1524,10 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const champion = playerRoll.find(championItem => championItem.id === championId);
+      const isRandomChampionPick = championId === "random";
+      const champion = isRandomChampionPick
+        ? await getRandomChampion(state.version)
+        : playerRoll.find(championItem => championItem.id === championId);
 
       if (!champion) {
         sendJson(res, 400, {
