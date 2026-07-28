@@ -33,6 +33,7 @@ const FRONTEND_DIR = path.join(__dirname, "frontend");
 
 const DASHBOARD_FILE = path.join(FRONTEND_DIR, "dashboard", "dashboard.html");
 const BRAVERY_FILE = path.join(FRONTEND_DIR, "bravery", "bravery.html");
+const RIOT_VERIFY_FILE = path.join(__dirname, "riot.txt");
 
 const regionalRoute = {
   euw1: "europe",
@@ -2045,6 +2046,24 @@ async function sendBravery(res) {
   }
 }
 
+async function sendRiotVerification(res) {
+  try {
+    const content = await fs.readFile(RIOT_VERIFY_FILE, "utf8");
+
+    res.writeHead(200, {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store"
+    });
+
+    res.end(content);
+  } catch {
+    sendJson(res, 404, {
+      error: "riot.txt nicht gefunden",
+      riotVerifyFile: RIOT_VERIFY_FILE
+    });
+  }
+}
+
 async function sendStaticFile(res, filePath) {
   const ext = path.extname(filePath).toLowerCase();
 
@@ -2072,6 +2091,13 @@ async function sendStaticFile(res, filePath) {
 
 const server = http.createServer(async (req, res) => {
   try {
+    const rawPath = String(req.url || "").split("?")[0];
+
+    if (req.method === "GET" && (rawPath === "/riot.txt" || rawPath === "//riot.txt")) {
+      await sendRiotVerification(res);
+      return;
+    }
+
     const url = new URL(req.url, `http://${req.headers.host}`);
 
     if (req.method === "GET" && url.pathname === "/") {
@@ -2110,6 +2136,11 @@ const server = http.createServer(async (req, res) => {
         });
       }
 
+      return;
+    }
+
+    if (req.method === "GET" && (url.pathname === "/riot.txt" || url.pathname === "//riot.txt")) {
+      await sendRiotVerification(res);
       return;
     }
 
