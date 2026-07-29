@@ -994,7 +994,7 @@ async function getDashboardChampionAssets() {
   const byId = {};
   const byName = {};
 
-  for (const champion of Object.values(championData.data || {})) {
+  for (const champion of Object.values(championData.data || {}).filter(isStandardPlayableChampion)) {
     const imageName = champion.image?.full || `${champion.id}.png`;
     const asset = {
       id: champion.id,
@@ -1385,6 +1385,63 @@ function shuffleArray(values) {
   return result;
 }
 
+const NON_STANDARD_CHAMPION_PREFIXES = ["Jade_", "Classic_"];
+
+function isNonStandardDataDragonAssetName(value) {
+  const text = String(value || "");
+  return NON_STANDARD_CHAMPION_PREFIXES.some(prefix => text.startsWith(prefix));
+}
+
+function isStandardPlayableChampion(champion) {
+  const id = String(champion?.id || "");
+  const imageName = String(champion?.image?.full || "");
+
+  if (!id) {
+    return false;
+  }
+
+  // Normal League champion ids in Data Dragon do not contain underscores.
+  // New variant entries like Jade_MasterYi, Jade_Sion or Classic_* must not enter Bravery rolls.
+  if (id.includes("_")) {
+    return false;
+  }
+
+  if (isNonStandardDataDragonAssetName(id) || isNonStandardDataDragonAssetName(imageName)) {
+    return false;
+  }
+
+  return true;
+}
+
+function getStandardChampionId(champion) {
+  const rawId = String(champion?.id || "");
+  const normalizedId = NON_STANDARD_CHAMPION_PREFIXES.reduce(
+    (value, prefix) => value.startsWith(prefix) ? value.slice(prefix.length) : value,
+    rawId
+  );
+
+  return normalizedId && !normalizedId.includes("_") ? normalizedId : rawId;
+}
+
+function toPublicChampion(champion, version) {
+  const imageName = champion.image?.full || `${champion.id}.png`;
+
+  return {
+    id: champion.id,
+    key: champion.key,
+    name: champion.name,
+    title: champion.title,
+    imageUrl: `https://ddragon.leagueoflegends.com/cdn/${version}/img/champion/${imageName}`,
+    splashUrl: `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${champion.id}_0.jpg`
+  };
+}
+
+function getPlayableChampions(championData, version) {
+  return Object.values(championData.data || {})
+    .filter(isStandardPlayableChampion)
+    .map(champion => toPublicChampion(champion, version));
+}
+
 async function fetchDataDragonJson(url) {
   const response = await fetch(url);
 
@@ -1410,14 +1467,7 @@ async function getRandomChampions(count = 3) {
     `https://ddragon.leagueoflegends.com/cdn/${version}/data/de_DE/champion.json`
   );
 
-  const champions = Object.values(championData.data || {}).map(champion => ({
-    id: champion.id,
-    key: champion.key,
-    name: champion.name,
-    title: champion.title,
-    imageUrl: `https://ddragon.leagueoflegends.com/cdn/${version}/img/champion/${champion.image.full}`,
-    splashUrl: `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${champion.id}_0.jpg`
-  }));
+  const champions = getPlayableChampions(championData, version);
 
   return {
     version,
@@ -1431,14 +1481,8 @@ async function getRandomChampionExcept(version, excludedChampionIds = []) {
   );
 
   const excluded = new Set((excludedChampionIds || []).map(id => String(id)));
-  const champions = Object.values(championData.data || {}).map(champion => ({
-    id: champion.id,
-    key: champion.key,
-    name: champion.name,
-    title: champion.title,
-    imageUrl: `https://ddragon.leagueoflegends.com/cdn/${version}/img/champion/${champion.image.full}`,
-    splashUrl: `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${champion.id}_0.jpg`
-  })).filter(champion => !excluded.has(String(champion.id)));
+  const champions = getPlayableChampions(championData, version)
+    .filter(champion => !excluded.has(String(champion.id)));
 
   const champion = shuffleArray(champions)[0];
 
@@ -1854,23 +1898,24 @@ function getRandomSummonerSpells(role, version) {
 }
 
 async function getChampionBasicSpells(champion, version) {
+  const championId = getStandardChampionId(champion);
   const fallback = ["Q", "W", "E"].map(key => ({
-    id: `${champion?.id || "champion"}-${key.toLowerCase()}`,
+    id: `${championId || "champion"}-${key.toLowerCase()}`,
     key,
     name: key,
     imageUrl: null
   }));
 
-  if (!champion?.id || !version) {
+  if (!championId || !version) {
     return fallback;
   }
 
   try {
     const championData = await fetchDataDragonJson(
-      `https://ddragon.leagueoflegends.com/cdn/${version}/data/de_DE/champion/${encodeURIComponent(champion.id)}.json`
+      `https://ddragon.leagueoflegends.com/cdn/${version}/data/de_DE/champion/${encodeURIComponent(championId)}.json`
     );
 
-    const championDetail = championData.data?.[champion.id];
+    const championDetail = championData.data?.[championId];
     const spells = Array.isArray(championDetail?.spells)
       ? championDetail.spells.slice(0, 3)
       : [];
@@ -1883,17 +1928,19 @@ async function getChampionBasicSpells(champion, version) {
       const key = ["Q", "W", "E"][index];
       const imageName = spell.image?.full;
 
+      const isNonStandardSpellIcon = isNonStandardDataDragonAssetName(imageName);
+
       return {
-        id: spell.id || `${champion.id}-${key.toLowerCase()}`,
+        id: spell.id || `${championId}-${key.toLowerCase()}`,
         key,
         name: spell.name || key,
-        imageUrl: imageName
+        imageUrl: imageName && !isNonStandardSpellIcon
           ? `https://ddragon.leagueoflegends.com/cdn/${version}/img/spell/${imageName}`
           : null
       };
     });
   } catch (error) {
-    console.warn(`Konnte Skill-Icons für ${champion.id} nicht laden:`, error.message);
+    console.warn(`Konnte Skill-Icons für ${championId} nicht laden:`, error.message);
     return fallback;
   }
 }
