@@ -158,7 +158,8 @@ function getStateSignature(state) {
       vote.voterKey,
       vote.targetPlayerKey,
       vote.itemIndex,
-      vote.itemId
+      vote.itemId,
+      vote.resolvedAt || ""
     ]),
     resetVotes: (state.resetVotes || []).map(vote => vote.voterKey),
     lastItemReroll: state.lastItemReroll?.eventId || "",
@@ -175,10 +176,20 @@ function getStateSignature(state) {
   });
 }
 
+function getItemVoteThreshold(state = currentState) {
+  const playerCount = Array.isArray(state.selections) ? state.selections.length : 0;
+
+  if (playerCount === 3) return 2;
+  if (playerCount >= 4) return 3;
+
+  return 2;
+}
+
 function getItemVoteCount(selection, item, itemIndex) {
   const targetPlayerKey = normalizePlayerName(selection.playerName);
 
   return (currentState.itemVotes || []).filter(vote =>
+    !vote.resolvedAt &&
     vote.targetPlayerKey === targetPlayerKey &&
     Number(vote.itemIndex) === Number(itemIndex) &&
     String(vote.itemId) === String(item.id)
@@ -196,6 +207,7 @@ function hasVotedForItem(playerName, selection, item, itemIndex) {
   const targetPlayerKey = normalizePlayerName(selection.playerName);
 
   return (currentState.itemVotes || []).some(vote =>
+    !vote.resolvedAt &&
     vote.voterKey === voterKey &&
     vote.targetPlayerKey === targetPlayerKey &&
     Number(vote.itemIndex) === Number(itemIndex) &&
@@ -243,14 +255,15 @@ function renderItemList(selection, extraClass = "", showNames = true) {
     <div class="item-list ${escapeHtml(extraClass)}">
       ${items.map((item, itemIndex) => {
         const voteCount = getItemVoteCount(selection, item, itemIndex);
-        const voteClass = voteCount >= 2 ? "item-vote-hot" : voteCount === 1 ? "item-vote-warm" : "";
+        const voteThreshold = getItemVoteThreshold();
+        const voteClass = voteCount >= Math.max(1, voteThreshold - 1) ? "item-vote-hot" : voteCount === 1 ? "item-vote-warm" : "";
         const hasAlreadyVoted = hasVotedForItem(currentPlayerName, selection, item, itemIndex);
         const canVote = currentPlayerName && !isOwnSelection && usedVotes < ITEM_VOTES_PER_PLAYER && !hasAlreadyVoted;
         const rerollClass = isLastRerolledItem(selection, item, itemIndex) ? "item-rerolled" : "";
         const titleParts = [item.name];
 
         if (voteCount > 0) {
-          titleParts.push(`${voteCount} Vote${voteCount === 1 ? "" : "s"}`);
+          titleParts.push(`${voteCount}/${voteThreshold} Votes`);
         }
 
         if (hasAlreadyVoted) {
@@ -282,7 +295,7 @@ function renderItemList(selection, extraClass = "", showNames = true) {
                 aria-label="${escapeHtml(item.name)} neu würfeln"
               >Ändern</button>
             ` : ""}
-            ${!canVote && !canSelfSwap && voteCount > 0 ? `<span class="item-vote-dot" aria-label="${voteCount} Votes"></span>` : ""}
+            ${voteCount > 0 ? `<span class="item-vote-badge" aria-label="${voteCount}/${voteThreshold} Votes">${voteCount}/${voteThreshold}</span>` : ""}
           </div>
         `;
       }).join("")}
@@ -506,8 +519,9 @@ function renderState(state, options = {}) {
     if (selections.length > 0) {
       const usedVotes = getUsedVoteCount(playerName);
       const voteText = currentPlayerSelection ? ` · Votes ${usedVotes}/${ITEM_VOTES_PER_PLAYER}` : "";
+      const thresholdText = ` · Item-Schwelle ${getItemVoteThreshold(state)}`;
       const resetText = getRequiredResetVotes(state) > 1 ? ` · Reset ${getResetVoteCount(state)}/${getRequiredResetVotes(state)}` : "";
-      setStatus(`Patch ${state.version || "unbekannt"} · Runde läuft${voteText}${resetText}`);
+      setStatus(`Patch ${state.version || "unbekannt"} · Runde läuft${voteText}${thresholdText}${resetText}`);
     } else {
       setStatus("Bereit");
     }
@@ -592,8 +606,9 @@ function renderState(state, options = {}) {
 
   const usedVotes = getUsedVoteCount(playerName);
   const voteText = currentPlayerSelection ? ` · Votes ${usedVotes}/${ITEM_VOTES_PER_PLAYER}` : "";
+  const thresholdText = ` · Item-Schwelle ${getItemVoteThreshold(state)}`;
   const resetText = getRequiredResetVotes(state) > 1 ? ` · Reset ${getResetVoteCount(state)}/${getRequiredResetVotes(state)}` : "";
-  setStatus(`Patch ${state.version || "unbekannt"} · Runde läuft${voteText}${resetText}`);
+  setStatus(`Patch ${state.version || "unbekannt"} · Runde läuft${voteText}${thresholdText}${resetText}`);
   markRerollEventsSeen(state);
 }
 

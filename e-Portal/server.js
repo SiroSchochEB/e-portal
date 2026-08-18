@@ -29,10 +29,14 @@ const DASHBOARD_CACHE_FILE =
 const BRAVERY_STATE_FILE =
   process.env.BRAVERY_STATE_FILE || path.join(__dirname, "data", "bravery.json");
 
+const MEME_STATE_FILE =
+  process.env.MEME_STATE_FILE || path.join(__dirname, "data", "meme.json");
+
 const FRONTEND_DIR = path.join(__dirname, "frontend");
 
 const DASHBOARD_FILE = path.join(FRONTEND_DIR, "dashboard", "dashboard.html");
 const BRAVERY_FILE = path.join(FRONTEND_DIR, "bravery", "bravery.html");
+const MEME_FILE = path.join(FRONTEND_DIR, "meme", "meme.html");
 const RIOT_VERIFY_FILE = path.join(__dirname, "riot.txt");
 
 const regionalRoute = {
@@ -167,7 +171,18 @@ const SUMMONER_SPELLS = [
 ];
 
 const ITEM_VOTES_PER_PLAYER = 3;
-const ITEM_REROLL_VOTE_THRESHOLD = 3;
+
+const MEME_WRITING_DURATION_MS = Number(process.env.MEME_WRITING_DURATION_MS || 90 * 1000);
+const MEME_VOTING_DURATION_MS = Number(process.env.MEME_VOTING_DURATION_MS || 45 * 1000);
+
+const MEME_TEMPLATES = [
+  { id: "drake", name: "Drake Hotline", imagePath: "/assets/memes/drake.svg" },
+  { id: "distracted", name: "Distracted Friend", imagePath: "/assets/memes/distracted.svg" },
+  { id: "button", name: "Sweaty Button", imagePath: "/assets/memes/button.svg" },
+  { id: "brain", name: "Galaxy Brain", imagePath: "/assets/memes/brain.svg" },
+  { id: "doge", name: "Suspicious Doge", imagePath: "/assets/memes/doge.svg" },
+  { id: "stonks", name: "Stonks", imagePath: "/assets/memes/stonks.svg" }
+];
 
 function getFinalItemCountForRole(role) {
   if (role === "support") return 5;
@@ -2011,10 +2026,20 @@ function normalizePlayerKey(playerName) {
 
 function getActiveItemVotes(state, targetPlayerKey, itemIndex, itemId) {
   return (state.itemVotes || []).filter(vote =>
+    !vote.resolvedAt &&
     vote.targetPlayerKey === targetPlayerKey &&
     Number(vote.itemIndex) === Number(itemIndex) &&
     String(vote.itemId) === String(itemId)
   );
+}
+
+function getItemRerollVoteThreshold(state) {
+  const playerCount = Array.isArray(state?.selections) ? state.selections.length : 0;
+
+  if (playerCount === 3) return 2;
+  if (playerCount >= 4) return 3;
+
+  return 2;
 }
 
 function getKnownBraveryPlayerKeys(state) {
@@ -2048,6 +2073,361 @@ function createEmptyBraveryState() {
     lastPlayerReroll: null,
     createdAt: null,
     updatedAt: null
+  };
+}
+
+function createEmptyMemeState() {
+  return {
+    phase: "lobby",
+    round: 0,
+    players: [],
+    scoreboard: {},
+    currentTemplate: null,
+    phaseEndsAt: null,
+    submissions: [],
+    votes: [],
+    roundResult: null,
+    createdAt: null,
+    updatedAt: null
+  };
+}
+
+function normalizeMemeState(state) {
+  const safeState = state && typeof state === "object" && !Array.isArray(state)
+    ? state
+    : createEmptyMemeState();
+
+  safeState.phase = ["lobby", "writing", "voting", "results"].includes(safeState.phase)
+    ? safeState.phase
+    : "lobby";
+  safeState.round = Number.isInteger(Number(safeState.round)) ? Number(safeState.round) : 0;
+  safeState.players = Array.isArray(safeState.players) ? safeState.players : [];
+  safeState.scoreboard = safeState.scoreboard && typeof safeState.scoreboard === "object" && !Array.isArray(safeState.scoreboard)
+    ? safeState.scoreboard
+    : {};
+  safeState.submissions = Array.isArray(safeState.submissions) ? safeState.submissions : [];
+  safeState.votes = Array.isArray(safeState.votes) ? safeState.votes : [];
+  safeState.currentTemplate = safeState.currentTemplate || null;
+  safeState.phaseEndsAt = safeState.phaseEndsAt || null;
+  safeState.roundResult = safeState.roundResult || null;
+  safeState.createdAt = safeState.createdAt || null;
+  safeState.updatedAt = safeState.updatedAt || null;
+
+  safeState.players = safeState.players
+    .map(player => ({
+      key: normalizePlayerKey(player.key || player.name),
+      name: String(player.name || player.key || "").trim(),
+      joinedAt: player.joinedAt || new Date().toISOString(),
+      lastSeenAt: player.lastSeenAt || player.joinedAt || new Date().toISOString()
+    }))
+    .filter(player => player.key && player.name);
+
+  for (const player of safeState.players) {
+    ensureMemeScoreboardEntry(safeState, player);
+  }
+
+  return safeState;
+}
+
+async function ensureMemeStateFile() {
+  await fs.mkdir(path.dirname(MEME_STATE_FILE), { recursive: true });
+
+  try {
+    await fs.access(MEME_STATE_FILE);
+  } catch {
+    await writeMemeState(createEmptyMemeState());
+  }
+}
+
+async function readMemeState() {
+  await ensureMemeStateFile();
+
+  try {
+    const content = await fs.readFile(MEME_STATE_FILE, "utf8");
+    return normalizeMemeState(JSON.parse(content || "{}"));
+  } catch {
+    const emptyState = createEmptyMemeState();
+    await writeMemeState(emptyState);
+    return emptyState;
+  }
+}
+
+async function writeMemeState(state) {
+  await fs.mkdir(path.dirname(MEME_STATE_FILE), { recursive: true });
+  await fs.writeFile(MEME_STATE_FILE, JSON.stringify(normalizeMemeState(state), null, 2), "utf8");
+}
+
+function getMemeIsoNow() {
+  return new Date().toISOString();
+}
+
+function getMemePhaseRemainingMs(state) {
+  const end = Date.parse(state.phaseEndsAt || "");
+
+  if (!Number.isFinite(end)) return 0;
+
+  return Math.max(0, end - Date.now());
+}
+
+function getRandomMemeTemplate() {
+  return shuffleArray(MEME_TEMPLATES)[0] || MEME_TEMPLATES[0];
+}
+
+function ensureMemeScoreboardEntry(state, player) {
+  const key = normalizePlayerKey(player?.key || player?.name);
+
+  if (!key) return null;
+
+  if (!state.scoreboard[key]) {
+    state.scoreboard[key] = {
+      playerKey: key,
+      playerName: player.name || key,
+      score: 0
+    };
+  } else {
+    state.scoreboard[key].playerKey = key;
+    state.scoreboard[key].playerName = player.name || state.scoreboard[key].playerName || key;
+    state.scoreboard[key].score = Number(state.scoreboard[key].score) || 0;
+  }
+
+  return state.scoreboard[key];
+}
+
+function upsertMemePlayer(state, playerName) {
+  const name = String(playerName || "").trim().slice(0, 32);
+  const key = normalizePlayerKey(name);
+
+  if (!name || !key) {
+    throw new Error("Spielername fehlt");
+  }
+
+  const now = getMemeIsoNow();
+  let player = state.players.find(existingPlayer => existingPlayer.key === key);
+
+  if (!player) {
+    player = {
+      key,
+      name,
+      joinedAt: now,
+      lastSeenAt: now
+    };
+
+    state.players.push(player);
+  } else {
+    player.name = name;
+    player.lastSeenAt = now;
+  }
+
+  ensureMemeScoreboardEntry(state, player);
+  state.updatedAt = now;
+
+  return player;
+}
+
+function getMemeSubmissionByPlayer(state, playerKey) {
+  return (state.submissions || []).find(submission => submission.playerKey === playerKey) || null;
+}
+
+function getMemeVoteByPlayer(state, playerKey) {
+  return (state.votes || []).find(vote => vote.voterKey === playerKey) || null;
+}
+
+function getMemeEligibleVoterKeys(state) {
+  const submissions = state.submissions || [];
+
+  if (submissions.length <= 1) return [];
+
+  return (state.players || [])
+    .filter(player => submissions.some(submission => submission.playerKey !== player.key))
+    .map(player => player.key);
+}
+
+function startMemeRound(state) {
+  const now = getMemeIsoNow();
+
+  for (const player of state.players || []) {
+    ensureMemeScoreboardEntry(state, player);
+  }
+
+  return normalizeMemeState({
+    ...state,
+    phase: "writing",
+    round: (Number(state.round) || 0) + 1,
+    currentTemplate: getRandomMemeTemplate(),
+    phaseEndsAt: new Date(Date.now() + MEME_WRITING_DURATION_MS).toISOString(),
+    submissions: [],
+    votes: [],
+    roundResult: null,
+    createdAt: state.createdAt || now,
+    updatedAt: now
+  });
+}
+
+function moveMemeToVoting(state) {
+  return normalizeMemeState({
+    ...state,
+    phase: "voting",
+    phaseEndsAt: new Date(Date.now() + MEME_VOTING_DURATION_MS).toISOString(),
+    votes: [],
+    roundResult: null,
+    updatedAt: getMemeIsoNow()
+  });
+}
+
+function finalizeMemeRound(state) {
+  if (state.phase === "results" && state.roundResult?.round === state.round) {
+    return state;
+  }
+
+  const votes = state.votes || [];
+  const submissions = state.submissions || [];
+  const votesBySubmissionId = new Map();
+
+  for (const vote of votes) {
+    votesBySubmissionId.set(
+      vote.submissionId,
+      (votesBySubmissionId.get(vote.submissionId) || 0) + 1
+    );
+  }
+
+  const resultSubmissions = submissions.map(submission => ({
+    ...submission,
+    votes: votesBySubmissionId.get(submission.id) || 0
+  }));
+
+  for (const submission of resultSubmissions) {
+    const player = {
+      key: submission.playerKey,
+      name: submission.playerName
+    };
+    const entry = ensureMemeScoreboardEntry(state, player);
+
+    if (entry) {
+      entry.score += Number(submission.votes) || 0;
+    }
+  }
+
+  const maxVotes = resultSubmissions.length > 0
+    ? Math.max(...resultSubmissions.map(submission => Number(submission.votes) || 0))
+    : 0;
+  const winners = maxVotes > 0
+    ? resultSubmissions.filter(submission => Number(submission.votes) === maxVotes)
+    : resultSubmissions.length === 1
+      ? resultSubmissions
+      : [];
+
+  return normalizeMemeState({
+    ...state,
+    phase: "results",
+    phaseEndsAt: null,
+    roundResult: {
+      round: state.round,
+      completedAt: getMemeIsoNow(),
+      submissions: resultSubmissions,
+      winners,
+      votes: votes.map(vote => ({
+        voterKey: vote.voterKey,
+        voterName: vote.voterName,
+        submissionId: vote.submissionId,
+        votedAt: vote.votedAt
+      }))
+    },
+    updatedAt: getMemeIsoNow()
+  });
+}
+
+function advanceMemeState(state) {
+  let nextState = normalizeMemeState(state);
+  const before = JSON.stringify(nextState);
+
+  if (nextState.phase === "writing") {
+    const expired = getMemePhaseRemainingMs(nextState) <= 0;
+    const playerCount = (nextState.players || []).length;
+    const submissionCount = (nextState.submissions || []).length;
+    const allSubmitted = playerCount > 0 && submissionCount >= playerCount;
+
+    if (expired || allSubmitted) {
+      nextState = submissionCount <= 1
+        ? finalizeMemeRound(nextState)
+        : moveMemeToVoting(nextState);
+    }
+  } else if (nextState.phase === "voting") {
+    const expired = getMemePhaseRemainingMs(nextState) <= 0;
+    const eligibleVoters = getMemeEligibleVoterKeys(nextState);
+    const voteCount = (nextState.votes || []).filter(vote => eligibleVoters.includes(vote.voterKey)).length;
+
+    if ((nextState.submissions || []).length <= 1 || expired || voteCount >= eligibleVoters.length) {
+      nextState = finalizeMemeRound(nextState);
+    }
+  }
+
+  return {
+    state: nextState,
+    changed: before !== JSON.stringify(nextState)
+  };
+}
+
+function getMemeScoreboard(state) {
+  return Object.values(state.scoreboard || {})
+    .map(entry => ({
+      playerKey: entry.playerKey,
+      playerName: entry.playerName,
+      score: Number(entry.score) || 0
+    }))
+    .sort((a, b) => b.score - a.score || a.playerName.localeCompare(b.playerName));
+}
+
+function toPublicMemeState(state, playerName = "") {
+  const playerKey = normalizePlayerKey(playerName);
+  const phase = state.phase;
+  const revealCaptions = phase === "voting" || phase === "results";
+  const submissions = (state.submissions || []).map(submission => {
+    const isOwn = submission.playerKey === playerKey;
+    const publicSubmission = {
+      id: submission.id,
+      playerKey: submission.playerKey,
+      playerName: submission.playerName,
+      submittedAt: submission.submittedAt,
+      isOwn
+    };
+
+    if (revealCaptions || isOwn) {
+      publicSubmission.caption = submission.caption;
+    }
+
+    if (phase === "results") {
+      publicSubmission.votes = Number(submission.votes) || 0;
+    }
+
+    return publicSubmission;
+  });
+  const ownSubmission = playerKey ? getMemeSubmissionByPlayer(state, playerKey) : null;
+  const ownVote = playerKey ? getMemeVoteByPlayer(state, playerKey) : null;
+
+  return {
+    phase: state.phase,
+    round: state.round,
+    serverTime: getMemeIsoNow(),
+    phaseEndsAt: state.phaseEndsAt,
+    timeRemainingMs: getMemePhaseRemainingMs(state),
+    players: state.players || [],
+    currentTemplate: state.currentTemplate,
+    submissions,
+    votes: phase === "results" ? (state.roundResult?.votes || []) : [],
+    scoreboard: getMemeScoreboard(state),
+    roundResult: phase === "results" ? state.roundResult : null,
+    currentPlayer: playerKey
+      ? {
+          playerKey,
+          playerName,
+          inLobby: (state.players || []).some(player => player.key === playerKey),
+          hasSubmitted: Boolean(ownSubmission),
+          hasVoted: Boolean(ownVote),
+          votedSubmissionId: ownVote?.submissionId || null
+        }
+      : null,
+    createdAt: state.createdAt,
+    updatedAt: state.updatedAt
   };
 }
 
@@ -2089,6 +2469,23 @@ async function sendBravery(res) {
     sendJson(res, 500, {
       error: "Bravery-Datei nicht gefunden",
       braveryFile: BRAVERY_FILE
+    });
+  }
+}
+
+async function sendMeme(res) {
+  try {
+    const html = await fs.readFile(MEME_FILE, "utf8");
+
+    res.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8"
+    });
+
+    res.end(html);
+  } catch {
+    sendJson(res, 500, {
+      error: "Meme-Datei nicht gefunden",
+      memeFile: MEME_FILE
     });
   }
 }
@@ -2157,9 +2554,19 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/meme") {
+      await sendMeme(res);
+      return;
+    }
+
     if (
       req.method === "GET" &&
-      (url.pathname.startsWith("/dashboard/") || url.pathname.startsWith("/bravery/"))
+      (
+        url.pathname.startsWith("/dashboard/") ||
+        url.pathname.startsWith("/bravery/") ||
+        url.pathname.startsWith("/meme/") ||
+        url.pathname.startsWith("/assets/")
+      )
     ) {
       const requestedPath = path.normalize(
         path.join(FRONTEND_DIR, url.pathname)
@@ -2197,11 +2604,185 @@ const server = http.createServer(async (req, res) => {
         port: PORT,
         accountsFile: ACCOUNTS_FILE,
         braveryStateFile: BRAVERY_STATE_FILE,
+        memeStateFile: MEME_STATE_FILE,
         frontendDir: FRONTEND_DIR,
         dashboardFile: DASHBOARD_FILE,
         braveryFile: BRAVERY_FILE,
+        memeFile: MEME_FILE,
         hasRiotApiKey: Boolean(RIOT_API_KEY)
       });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/meme/state") {
+      const playerName = String(url.searchParams.get("playerName") || "").trim();
+      const current = await readMemeState();
+      const advanced = advanceMemeState(current);
+
+      if (advanced.changed) {
+        await writeMemeState(advanced.state);
+      }
+
+      sendJson(res, 200, toPublicMemeState(advanced.state, playerName));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/meme/join") {
+      const body = await readRequestBody(req);
+      const playerName = String(body.playerName || "").trim();
+      const current = await readMemeState();
+      const advanced = advanceMemeState(current);
+      const state = advanced.state;
+
+      upsertMemePlayer(state, playerName);
+      await writeMemeState(state);
+      sendJson(res, 200, toPublicMemeState(state, playerName));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/meme/start") {
+      const body = await readRequestBody(req);
+      const playerName = String(body.playerName || "").trim();
+      const current = await readMemeState();
+      const advanced = advanceMemeState(current);
+      let state = advanced.state;
+
+      if (playerName) {
+        upsertMemePlayer(state, playerName);
+      }
+
+      if (!["lobby", "results"].includes(state.phase)) {
+        sendJson(res, 400, { error: "Die Runde läuft bereits." });
+        return;
+      }
+
+      if ((state.players || []).length === 0) {
+        sendJson(res, 400, { error: "Mindestens ein Spieler muss in der Lobby sein." });
+        return;
+      }
+
+      state = startMemeRound(state);
+      await writeMemeState(state);
+      sendJson(res, 200, toPublicMemeState(state, playerName));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/meme/submit") {
+      const body = await readRequestBody(req);
+      const playerName = String(body.playerName || "").trim();
+      const caption = String(body.caption || "").trim().slice(0, 180);
+      const current = await readMemeState();
+      const advanced = advanceMemeState(current);
+      let state = advanced.state;
+
+      if (state.phase !== "writing") {
+        sendJson(res, 400, { error: "Aktuell ist keine Schreibphase aktiv." });
+        return;
+      }
+
+      const player = upsertMemePlayer(state, playerName);
+
+      if (!caption) {
+        sendJson(res, 400, { error: "Caption fehlt." });
+        return;
+      }
+
+      if (getMemeSubmissionByPlayer(state, player.key)) {
+        sendJson(res, 400, { error: "Du hast in dieser Runde bereits abgegeben." });
+        return;
+      }
+
+      const now = getMemeIsoNow();
+      state.submissions.push({
+        id: `${state.round}-${player.key}-${Date.now().toString(36)}`,
+        round: state.round,
+        playerKey: player.key,
+        playerName: player.name,
+        caption,
+        submittedAt: now
+      });
+      state.updatedAt = now;
+
+      const afterSubmit = advanceMemeState(state);
+      await writeMemeState(afterSubmit.state);
+      sendJson(res, 200, toPublicMemeState(afterSubmit.state, playerName));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/meme/vote") {
+      const body = await readRequestBody(req);
+      const playerName = String(body.playerName || "").trim();
+      const submissionId = String(body.submissionId || "").trim();
+      const current = await readMemeState();
+      const advanced = advanceMemeState(current);
+      let state = advanced.state;
+
+      if (state.phase !== "voting") {
+        sendJson(res, 400, { error: "Aktuell ist keine Votingphase aktiv." });
+        return;
+      }
+
+      const player = upsertMemePlayer(state, playerName);
+      const submission = (state.submissions || []).find(item => item.id === submissionId);
+
+      if (!submission) {
+        sendJson(res, 400, { error: "Meme wurde nicht gefunden." });
+        return;
+      }
+
+      if (submission.playerKey === player.key) {
+        sendJson(res, 400, { error: "Du kannst nicht für dein eigenes Meme voten." });
+        return;
+      }
+
+      if (getMemeVoteByPlayer(state, player.key)) {
+        sendJson(res, 400, { error: "Du hast in dieser Runde bereits gevotet." });
+        return;
+      }
+
+      const now = getMemeIsoNow();
+      state.votes.push({
+        voterKey: player.key,
+        voterName: player.name,
+        submissionId,
+        targetPlayerKey: submission.playerKey,
+        targetPlayerName: submission.playerName,
+        votedAt: now
+      });
+      state.updatedAt = now;
+
+      const afterVote = advanceMemeState(state);
+      await writeMemeState(afterVote.state);
+      sendJson(res, 200, toPublicMemeState(afterVote.state, playerName));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/meme/next") {
+      const body = await readRequestBody(req);
+      const playerName = String(body.playerName || "").trim();
+      const current = await readMemeState();
+      const advanced = advanceMemeState(current);
+      let state = advanced.state;
+
+      if (playerName) {
+        upsertMemePlayer(state, playerName);
+      }
+
+      if (state.phase !== "results") {
+        sendJson(res, 400, { error: "Die aktuelle Runde ist noch nicht abgeschlossen." });
+        return;
+      }
+
+      state = startMemeRound(state);
+      await writeMemeState(state);
+      sendJson(res, 200, toPublicMemeState(state, playerName));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/meme/reset") {
+      const state = createEmptyMemeState();
+      await writeMemeState(state);
+      sendJson(res, 200, toPublicMemeState(state));
       return;
     }
 
@@ -2492,6 +3073,7 @@ const server = http.createServer(async (req, res) => {
 
       const itemVotes = state.itemVotes || [];
       const voterVotes = itemVotes.filter(vote => vote.voterKey === voterKey);
+      const itemVoteThreshold = getItemRerollVoteThreshold(state);
 
       if (voterVotes.length >= ITEM_VOTES_PER_PLAYER) {
         sendJson(res, 400, { error: `Du hast deine ${ITEM_VOTES_PER_PLAYER} Votes für diese Runde bereits benutzt.` });
@@ -2499,6 +3081,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       const alreadyVotedForThisItem = itemVotes.some(vote =>
+        !vote.resolvedAt &&
         vote.voterKey === voterKey &&
         vote.targetPlayerKey === targetPlayerKey &&
         Number(vote.itemIndex) === itemIndex &&
@@ -2531,7 +3114,9 @@ const server = http.createServer(async (req, res) => {
 
       let lastItemReroll = state.lastItemReroll || null;
 
-      if (activeVotes.length >= ITEM_REROLL_VOTE_THRESHOLD) {
+      let finalVotes = nextVotes;
+
+      if (activeVotes.length >= itemVoteThreshold) {
         const replacementItem = await getRandomReplacementItem(
           state.version,
           targetItems,
@@ -2540,6 +3125,24 @@ const server = http.createServer(async (req, res) => {
 
         targetItems[itemIndex] = replacementItem;
         targetSelection.items = targetItems;
+
+        const resolvedAt = new Date().toISOString();
+        finalVotes = nextVotes.map(vote => {
+          if (
+            !vote.resolvedAt &&
+            vote.targetPlayerKey === targetPlayerKey &&
+            Number(vote.itemIndex) === Number(itemIndex) &&
+            String(vote.itemId) === String(targetItem.id)
+          ) {
+            return {
+              ...vote,
+              resolvedAt,
+              resolvedBy: "item-reroll"
+            };
+          }
+
+          return vote;
+        });
 
         lastItemReroll = {
           eventId: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -2550,14 +3153,15 @@ const server = http.createServer(async (req, res) => {
           oldItemName: targetItem.name,
           newItemId: replacementItem.id,
           newItemName: replacementItem.name,
-          at: new Date().toISOString()
+          threshold: itemVoteThreshold,
+          at: resolvedAt
         };
       }
 
       const newState = {
         ...state,
         selections,
-        itemVotes: nextVotes,
+        itemVotes: finalVotes,
         lastItemReroll,
         updatedAt: new Date().toISOString()
       };

@@ -91,6 +91,11 @@ body {
   filter: brightness(1.08);
 }
 
+.nav-button-secondary {
+  background: linear-gradient(135deg, #8fa7ff, #c4b5fd);
+  color: #071022;
+}
+
 .status {
   background: rgba(17, 24, 39, 0.85);
   border: 1px solid var(--border);

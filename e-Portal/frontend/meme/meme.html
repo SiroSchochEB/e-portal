@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Make it Meme</title>
+  <link rel="stylesheet" href="/meme/meme.css?v=1" />
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div>
+        <a class="back-link" href="/">← Dashboard</a>
+        <h1>Make it Meme</h1>
+        <p>Private Meme-Runden für die Lobby.</p>
+      </div>
+      <div class="status" id="status">Lade...</div>
+    </section>
+
+    <section class="panel join-panel" id="joinPanel">
+      <div>
+        <h2>Spieler</h2>
+        <p>Gib deinen Namen ein und joine die globale Lobby.</p>
+      </div>
+      <form class="join-form" id="joinForm">
+        <input id="playerNameInput" type="text" maxlength="32" placeholder="Dein Name" required />
+        <button type="submit">Join</button>
+      </form>
+    </section>
+
+    <section class="panel game-panel">
+      <div class="panel-header">
+        <div>
+          <h2 id="phaseTitle">Lobby</h2>
+          <p id="phaseDescription">Warte auf Spieler.</p>
+        </div>
+        <div class="timer" id="timer">--</div>
+      </div>
+
+      <div id="error"></div>
+      <div id="app"></div>
+    </section>
+  </main>
+
+  <script src="/meme/meme.js?v=1" defer></script>
+</body>
+</html>

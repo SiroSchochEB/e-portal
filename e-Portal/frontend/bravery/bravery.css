@@ -927,3 +927,29 @@ button:disabled {
     right: 8px;
   }
 }
+
+
+.item-vote-badge {
+  position: absolute;
+  left: 7px;
+  top: 7px;
+  z-index: 2;
+  min-width: 32px;
+  display: inline-flex;
+  justify-content: center;
+  padding: 3px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 900;
+  color: #071022;
+  background: rgba(255, 190, 80, 0.96);
+  border: 1px solid rgba(255, 230, 160, 0.65);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.30);
+}
+
+.item-vote-hot .item-vote-badge {
+  color: #fff1f2;
+  background: rgba(255, 80, 95, 0.96);
+  border-color: rgba(255, 180, 190, 0.72);
+}

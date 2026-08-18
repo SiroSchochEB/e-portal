@@ -1,0 +1,361 @@
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #080b16;
+  --panel: rgba(17, 24, 39, 0.88);
+  --panel-2: rgba(31, 41, 55, 0.74);
+  --text: #f8fafc;
+  --muted: #a7b0c6;
+  --border: rgba(255, 255, 255, 0.12);
+  --accent: #facc15;
+  --accent-2: #c89b3c;
+  --blue: #8fa7ff;
+  --success: #22c55e;
+  --danger: #ef4444;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: Arial, Helvetica, sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(250, 204, 21, 0.15), transparent 30%),
+    radial-gradient(circle at top right, rgba(143, 167, 255, 0.18), transparent 34%),
+    var(--bg);
+}
+
+.page {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 32px 0;
+}
+
+.hero,
+.panel-header,
+.join-panel {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.hero {
+  margin-bottom: 24px;
+}
+
+.back-link {
+  color: #a7b8ff;
+  text-decoration: none;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  margin-top: 14px;
+  font-size: 42px;
+  letter-spacing: -0.04em;
+}
+
+h2 {
+  font-size: 24px;
+}
+
+p {
+  margin-top: 8px;
+  color: var(--muted);
+}
+
+.status,
+.timer {
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.timer {
+  min-width: 96px;
+  text-align: center;
+  color: #ffe8a3;
+  font-weight: 900;
+  background: rgba(250, 204, 21, 0.12);
+  border-color: rgba(250, 204, 21, 0.28);
+}
+
+.panel {
+  margin-bottom: 20px;
+  border-radius: 22px;
+  padding: 22px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.25);
+}
+
+.join-form {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+input,
+textarea,
+button {
+  border-radius: 13px;
+  border: 1px solid var(--border);
+  background: rgba(31, 41, 55, 0.92);
+  color: var(--text);
+  padding: 11px 13px;
+  font-size: 14px;
+}
+
+textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+button {
+  cursor: pointer;
+  border: 0;
+  color: #111827;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  font-weight: 900;
+}
+
+button.secondary {
+  color: var(--text);
+  background: rgba(143, 167, 255, 0.16);
+  border: 1px solid rgba(143, 167, 255, 0.3);
+}
+
+button.danger {
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.16);
+  border: 1px solid rgba(239, 68, 68, 0.38);
+}
+
+button:hover {
+  filter: brightness(1.08);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  filter: none;
+}
+
+#error {
+  margin: 16px 0;
+}
+
+.error {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.38);
+  color: #fecaca;
+}
+
+.lobby-grid,
+.result-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 18px;
+}
+
+.player-list,
+.scoreboard {
+  display: grid;
+  gap: 8px;
+}
+
+.player-pill,
+.score-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 13px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.player-pill.own {
+  border-color: rgba(143, 167, 255, 0.55);
+  background: rgba(143, 167, 255, 0.14);
+}
+
+.section-title {
+  margin-bottom: 12px;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.meme-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 18px;
+  align-items: start;
+}
+
+.template-card,
+.caption-card,
+.vote-card,
+.result-card,
+.side-card {
+  border-radius: 18px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+}
+
+.template-card img,
+.vote-template img {
+  width: 100%;
+  border-radius: 14px;
+  display: block;
+  background: #111827;
+}
+
+.template-name {
+  margin-top: 12px;
+  color: #ffe8a3;
+  font-weight: 900;
+}
+
+.caption-preview {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.26);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 20px;
+  line-height: 1.25;
+  font-weight: 900;
+  text-align: center;
+  min-height: 56px;
+  display: grid;
+  place-items: center;
+}
+
+.caption-actions,
+.action-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.submitted-note,
+.empty-note {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.submitted-note strong {
+  color: #bbf7d0;
+}
+
+.vote-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.vote-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vote-card.own {
+  opacity: 0.72;
+}
+
+.vote-card.selected {
+  border-color: rgba(250, 204, 21, 0.58);
+  box-shadow: 0 0 24px rgba(250, 204, 21, 0.12);
+}
+
+.caption-text {
+  min-height: 74px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  font-weight: 900;
+  line-height: 1.25;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.card-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.vote-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: rgba(250, 204, 21, 0.13);
+  color: #ffe8a3;
+  font-weight: 900;
+}
+
+.winner-banner {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.18), rgba(143, 167, 255, 0.12));
+  border: 1px solid rgba(250, 204, 21, 0.28);
+  font-weight: 900;
+}
+
+@media (max-width: 900px) {
+  .hero,
+  .panel-header,
+  .join-panel {
+    flex-direction: column;
+  }
+
+  .join-form {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .join-form input,
+  .join-form button {
+    flex: 1;
+  }
+
+  .lobby-grid,
+  .result-grid,
+  .meme-stage {
+    grid-template-columns: 1fr;
+  }
+}
